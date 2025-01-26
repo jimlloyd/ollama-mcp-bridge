@@ -4,30 +4,19 @@ import { logger } from '../logger';
 
 export async function testOllamaConnection(config: LLMConfig): Promise<boolean> {
   logger.info('Starting Ollama connection test...');
-  
+
   const testClient = new LLMClient(config);
   const testPrompt = 'Respond with exactly the word "connected" if you can read this message.';
-  
+
   try {
     logger.info('Testing basic connectivity to Ollama...');
     logger.info(`Attempting to connect to ${config.baseUrl} with model ${config.model}`);
-    
-    const format = {
-      type: "object",
-      properties: {
-        response: {
-          type: "string",
-          enum: ["connected"]
-        }
-      },
-      required: ["response"]
-    };
 
-    // Override the format for the test
-    testClient.format = format;
-    
+    // Set system prompt to enforce format
+    testClient.systemPrompt = 'You must respond with exactly the word "connected" and nothing else.';
+
     const response = await testClient.invokeWithPrompt(testPrompt);
-    
+
     if (!response || !response.content) {
       logger.error('No response received from Ollama');
       return false;
@@ -35,10 +24,18 @@ export async function testOllamaConnection(config: LLMConfig): Promise<boolean> 
 
     logger.info('Response content:', response.content);
 
-    logger.info('Connection test completed successfully');
-    logger.info(`Using model: ${config.model}`);
-    logger.info(`Base URL: ${config.baseUrl}`);
-    return true;
+    // Check if response is exactly "connected"
+    const isConnected = response.content.trim().toLowerCase() === 'connected';
+
+    if (isConnected) {
+      logger.info('Connection test completed successfully');
+      logger.info(`Using model: ${config.model}`);
+      logger.info(`Base URL: ${config.baseUrl}`);
+      return true;
+    } else {
+      logger.error('Response did not match expected format');
+      return false;
+    }
 
   } catch (error: any) {
     logger.error('Connection test failed with error');
