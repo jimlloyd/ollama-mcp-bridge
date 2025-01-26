@@ -28,14 +28,14 @@ async function makeOllamaRequest(payload: any) {
   try {
     console.log('Making request to Ollama with payload:', JSON.stringify(payload, null, 2));
     const startTime = Date.now();
-    
+
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: controller.signal
+      signal: controller.signal as any
     });
 
     const endTime = Date.now();
@@ -63,22 +63,22 @@ async function makeOllamaRequest(payload: any) {
 }
 
 describe('Ollama Direct Interaction Tests', () => {
-  
-  beforeEach(async () => {
-    // Kill any existing Ollama processes before each test
+  beforeAll(async () => {
+    // Kill any existing Ollama processes before starting tests
     await killOllama();
     // Wait for process to fully terminate
     await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Start Ollama server once for all tests
+    console.log('Starting Ollama server...');
+    exec('ollama serve');
+
+    // Wait for server to start
+    await new Promise(resolve => setTimeout(resolve, 5000));
   }, HOOK_TIMEOUT);
 
   it('should successfully connect to Ollama API', async () => {
-    // Start Ollama server
-    console.log('Starting Ollama server...');
-    const ollamaProcess = exec('ollama serve');
-    
-    // Wait for server to start
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
+
     console.log('Testing connection...');
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
     expect(response.ok).toBe(true);
@@ -87,13 +87,6 @@ describe('Ollama Direct Interaction Tests', () => {
   }, TEST_TIMEOUT);
 
   it('should test ultra minimal prompt', async () => {
-    // Start Ollama server
-    console.log('Starting Ollama server...');
-    const ollamaProcess = exec('ollama serve');
-    
-    // Wait for server to start
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
     const payload = {
       model: MODEL_NAME,
       messages: [
@@ -129,13 +122,6 @@ describe('Ollama Direct Interaction Tests', () => {
   }, TEST_TIMEOUT);
 
   it('should test prompt with format reminder', async () => {
-    // Start Ollama server
-    console.log('Starting Ollama server...');
-    const ollamaProcess = exec('ollama serve');
-    
-    // Wait for server to start
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
     const payload = {
       model: MODEL_NAME,
       messages: [
