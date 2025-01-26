@@ -5,13 +5,14 @@ import {
   // startOllama,
   makeOllamaRequest,
   parseToolResponse,
-  cleanupProcess,
-  TEST_TIMEOUT,
-  HOOK_TIMEOUT,
+  // cleanupProcess,
+  // TEST_TIMEOUT,
+  // HOOK_TIMEOUT,
   MODEL_NAME
 } from './test-utils';
 
 describe('Brave Search MCP Tests', () => {
+  it('should handle search request', async () => {
     const payload = {
       model: MODEL_NAME,
       messages: [
@@ -34,5 +35,5 @@ describe('Brave Search MCP Tests', () => {
     expect(parsed.tool_args).toBeDefined();
     expect(parsed.tool_args.query).toBeDefined();
     expect(parsed.tool_args.count).toBe(1);
-  }, TEST_TIMEOUT);
+  });
 });
