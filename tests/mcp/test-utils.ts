@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { exec, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import {
@@ -152,9 +151,7 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestPayload),
-      signal: controller.signal as any,
-      // Disable connection pooling
-      agent: false
+      signal: controller.signal
     });
 
     debugRequest_timing(startTime);
@@ -177,15 +174,6 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
     throw new Error('Unknown error occurred');
   } finally {
     clearTimeout(timeoutId);
-    // Ensure response body is consumed and connection is closed
-    if (response?.body) {
-      try {
-        // Use destroy() instead of cancel() for Node.js streams
-        (response.body as any).destroy();
-      } catch (e) {
-        // Ignore errors during cleanup
-      }
-    }
   }
 }
 
@@ -237,6 +225,6 @@ export async function cleanupProcess(process: ChildProcess | null) {
 if (typeof afterAll === 'function') {
   afterAll(async () => {
     // Add a small delay to allow any pending connections to close
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 500));
   });
 }
