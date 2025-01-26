@@ -1,17 +1,19 @@
-import { exec, type ExecOptions } from 'child_process';
-import { promisify } from 'util';
 import { BaseServiceManager } from '../../service/base';
-import { ServiceError, ServiceConfig } from '../../service/types';
+import { ServiceError, ProcessError, PlatformError } from '../../service/errors';
+import { ServiceConfig } from '../../service/types';
+import { createHealthChecker } from '../../service/health';
 import { logger } from '../../logger';
-
-const execAsync = promisify(exec);
+import { UnixProcessManager } from './process';
 
 /**
  * Unix-specific service manager implementation
  */
 export class UnixServiceManager extends BaseServiceManager {
+  private processManager: UnixProcessManager;
+
   constructor(config: ServiceConfig) {
     super(config);
+    this.processManager = new UnixProcessManager();
   }
 
   async startService(): Promise<void> {
@@ -22,45 +24,52 @@ export class UnixServiceManager extends BaseServiceManager {
         return;
       }
 
-      // Check for existing process
+      this.updateStatus({ state: 'starting' });
+
+      // Stop any existing process
       try {
-        const { stdout } = await execAsync('pgrep ollama');
-        const pid = parseInt(stdout.trim(), 10);
-        if (pid) {
-          logger.debug(`Found existing Ollama process (${pid}), stopping...`);
-          await execAsync(`kill ${pid}`);
-          // Wait for process to stop
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        if (await this.processManager.isProcessRunning('ollama')) {
+          await this.processManager.stopProcess('ollama');
         }
       } catch (error) {
-        // Process not found, continue
+        throw new ProcessError(
+          'Failed to stop existing process',
+          'ollama',
+          'stop',
+          error as Error
+        );
       }
 
       // Start service
-      this.updateStatus({ state: 'starting' });
-      const options: ExecOptions = {
-        windowsHide: true,
-        shell: '/bin/sh'
-      };
-      const process = exec(this.config.command, options);
-
-      // Handle output to prevent buffer issues
-      process.stdout?.on('data', (data) => {
-        logger.debug('Ollama stdout:', data.toString());
-      });
-      process.stderr?.on('data', (data) => {
-        logger.debug('Ollama stderr:', data.toString());
-      });
-      process.unref();
+      try {
+        await this.processManager.startProcess(this.config.command);
+      } catch (error) {
+        throw new ProcessError(
+          'Failed to start process',
+          'ollama',
+          'start',
+          error as Error
+        );
+      }
 
       // Wait for service to be healthy
-      await this.waitForHealth();
+      const healthChecker = createHealthChecker(this.config.port);
+      await this.waitForHealth(healthChecker);
 
       this.logStatusChange('start');
     } catch (error) {
-      this.updateStatus({ state: 'error', lastError: error instanceof Error ? error.message : String(error) });
-      this.logStatusChange('start', error as Error);
-      throw new ServiceError('Failed to start service', await this.getStatus(), error as Error);
+      const wrappedError = error instanceof Error ? error : new Error(String(error));
+
+      if (error instanceof ProcessError || error instanceof ServiceError) {
+        throw error;
+      }
+
+      throw new PlatformError(
+        'Failed to start service on Unix platform',
+        'unix',
+        'start',
+        wrappedError
+      );
     }
   }
 
@@ -69,24 +78,30 @@ export class UnixServiceManager extends BaseServiceManager {
       this.updateStatus({ state: 'stopping' });
 
       try {
-        const { stdout } = await execAsync('pgrep ollama');
-        const pid = parseInt(stdout.trim(), 10);
-        if (pid) {
-          await execAsync(`kill ${pid}`);
-          this.updateStatus({ running: false, state: 'stopped', pid: undefined });
-          this.logStatusChange('stop');
-          return;
-        }
-      } catch (error) {
-        // Process not found, consider it stopped
-        this.updateStatus({ running: false, state: 'stopped', pid: undefined });
+        await this.processManager.stopProcess('ollama');
+        this.updateStatus({ running: false, state: 'stopped' });
         this.logStatusChange('stop');
-        return;
+      } catch (error) {
+        throw new ProcessError(
+          'Failed to stop process',
+          'ollama',
+          'stop',
+          error as Error
+        );
       }
     } catch (error) {
-      this.updateStatus({ state: 'error', lastError: error instanceof Error ? error.message : String(error) });
-      this.logStatusChange('stop', error as Error);
-      throw new ServiceError('Failed to stop service', await this.getStatus(), error as Error);
+      const wrappedError = error instanceof Error ? error : new Error(String(error));
+
+      if (error instanceof ProcessError || error instanceof ServiceError) {
+        throw error;
+      }
+
+      throw new PlatformError(
+        'Failed to stop service on Unix platform',
+        'unix',
+        'stop',
+        wrappedError
+      );
     }
   }
 }

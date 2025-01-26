@@ -1,15 +1,20 @@
-import { exec, type ExecOptions } from 'child_process';
 import { BaseServiceManager } from '../../service/base';
-import { ServiceError, ServiceConfig } from '../../service/types';
+import { ServiceError, ProcessError, PlatformError } from '../../service/errors';
+import { ServiceConfig } from '../../service/types';
+import { createHealthChecker } from '../../service/health';
 import { logger } from '../../logger';
+import { WindowsProcessManager } from './process';
 
 /**
  * Windows-specific service manager implementation using health checks
  * instead of aggressive process management
  */
 export class WindowsServiceManager extends BaseServiceManager {
+  private processManager: WindowsProcessManager;
+
   constructor(config: ServiceConfig) {
     super(config);
+    this.processManager = new WindowsProcessManager();
   }
 
   async startService(): Promise<void> {
@@ -20,30 +25,52 @@ export class WindowsServiceManager extends BaseServiceManager {
         return;
       }
 
-      // Start service
       this.updateStatus({ state: 'starting' });
-      const options: ExecOptions = {
-        windowsHide: true
-      };
-      const process = exec(this.config.command, options);
 
-      // Handle output to prevent buffer issues
-      process.stdout?.on('data', (data) => {
-        logger.debug('Ollama stdout:', data.toString());
-      });
-      process.stderr?.on('data', (data) => {
-        logger.debug('Ollama stderr:', data.toString());
-      });
-      process.unref();
+      // Stop any existing process
+      try {
+        if (await this.processManager.isProcessRunning('ollama.exe')) {
+          await this.processManager.stopProcess('ollama.exe');
+        }
+      } catch (error) {
+        throw new ProcessError(
+          'Failed to stop existing process',
+          'ollama.exe',
+          'stop',
+          error as Error
+        );
+      }
+
+      // Start service
+      try {
+        await this.processManager.startProcess(this.config.command);
+      } catch (error) {
+        throw new ProcessError(
+          'Failed to start process',
+          'ollama.exe',
+          'start',
+          error as Error
+        );
+      }
 
       // Wait for service to be healthy
-      await this.waitForHealth();
+      const healthChecker = createHealthChecker(this.config.port);
+      await this.waitForHealth(healthChecker);
 
       this.logStatusChange('start');
     } catch (error) {
-      this.updateStatus({ state: 'error', lastError: error instanceof Error ? error.message : String(error) });
-      this.logStatusChange('start', error as Error);
-      throw new ServiceError('Failed to start service', await this.getStatus(), error as Error);
+      const wrappedError = error instanceof Error ? error : new Error(String(error));
+
+      if (error instanceof ProcessError || error instanceof ServiceError) {
+        throw error;
+      }
+
+      throw new PlatformError(
+        'Failed to start service on Windows platform',
+        'windows',
+        'start',
+        wrappedError
+      );
     }
   }
 
@@ -57,24 +84,8 @@ export class WindowsServiceManager extends BaseServiceManager {
 
       this.updateStatus({ state: 'stopping' });
 
-      // Use taskkill as a last resort, preferring graceful shutdown
       try {
-        await new Promise<void>((resolve, reject) => {
-          exec('taskkill /IM ollama.exe', (error) => {
-            if (error) {
-              // If normal kill fails, force it
-              exec('taskkill /F /IM ollama.exe', (forceError) => {
-                if (forceError) {
-                  reject(forceError);
-                } else {
-                  resolve();
-                }
-              });
-            } else {
-              resolve();
-            }
-          });
-        });
+        await this.processManager.stopProcess('ollama.exe');
 
         // Wait for service to stop
         let attempts = 0;
@@ -89,12 +100,33 @@ export class WindowsServiceManager extends BaseServiceManager {
         this.updateStatus({ running: false, state: 'stopped' });
         this.logStatusChange('stop');
       } catch (error) {
-        throw new Error(`Failed to stop service: ${error instanceof Error ? error.message : String(error)}`);
+        // If normal stop fails, try force stop
+        try {
+          await this.processManager.forceStopProcess('ollama.exe');
+          this.updateStatus({ running: false, state: 'stopped' });
+          this.logStatusChange('stop');
+        } catch (forceError) {
+          throw new ProcessError(
+            'Failed to force stop process',
+            'ollama.exe',
+            'stop',
+            forceError as Error
+          );
+        }
       }
     } catch (error) {
-      this.updateStatus({ state: 'error', lastError: error instanceof Error ? error.message : String(error) });
-      this.logStatusChange('stop', error as Error);
-      throw new ServiceError('Failed to stop service', await this.getStatus(), error as Error);
+      const wrappedError = error instanceof Error ? error : new Error(String(error));
+
+      if (error instanceof ProcessError || error instanceof ServiceError) {
+        throw error;
+      }
+
+      throw new PlatformError(
+        'Failed to stop service on Windows platform',
+        'windows',
+        'stop',
+        wrappedError
+      );
     }
   }
 }

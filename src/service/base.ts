@@ -1,5 +1,7 @@
-import { ServiceManager, ServiceStatus, ServiceConfig, ServiceTimeoutError } from './types';
+import { ServiceManager, ServiceStatus, ServiceConfig } from './types';
 import { logger } from '../logger';
+import { HealthChecker, createHealthChecker, waitForHealth } from './health';
+import { ServiceError } from './errors';
 
 /**
  * Base service manager implementation providing common functionality
@@ -10,21 +12,20 @@ export abstract class BaseServiceManager implements ServiceManager {
     state: 'stopped'
   };
 
-  constructor(protected config: ServiceConfig) {}
+  protected healthChecker: HealthChecker;
+
+  constructor(protected config: ServiceConfig) {
+    this.healthChecker = createHealthChecker(config.port);
+  }
 
   abstract startService(): Promise<void>;
   abstract stopService(): Promise<void>;
 
   /**
-   * Check if the service is healthy by attempting to connect
+   * Check if the service is healthy
    */
   async checkHealth(): Promise<boolean> {
-    try {
-      const response = await fetch(`http://127.0.0.1:${this.config.port}/api/tags`);
-      return response.ok;
-    } catch (error) {
-      return false;
-    }
+    return this.healthChecker.check();
   }
 
   /**
@@ -41,26 +42,15 @@ export abstract class BaseServiceManager implements ServiceManager {
    * Wait for service to become healthy
    */
   async waitForHealth(
-    timeout: number = this.config.healthCheck.timeout,
-    interval: number = this.config.healthCheck.interval
-  ): Promise<boolean> {
-    const start = Date.now();
-
-    while (Date.now() - start < timeout) {
-      if (await this.checkHealth()) {
-        this.status.state = 'running';
-        this.status.running = true;
-        return true;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, interval));
-      logger.debug(`Waiting for service to be healthy... (${Date.now() - start}ms)`);
-    }
-
-    throw new ServiceTimeoutError(
-      'health',
-      timeout,
-      await this.getStatus()
+    checker: HealthChecker = this.healthChecker
+  ): Promise<void> {
+    await waitForHealth(
+      checker,
+      {
+        timeout: this.config.healthCheck.timeout,
+        interval: this.config.healthCheck.interval
+      },
+      () => this.getStatus()
     );
   }
 
