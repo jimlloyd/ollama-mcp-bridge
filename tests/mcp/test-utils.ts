@@ -19,7 +19,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          query: { 
+          query: {
             type: "string",
             description: "Search query for emails"
           },
@@ -41,7 +41,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          query: { 
+          query: {
             type: "string",
             description: "Search query for Google Drive files"
           }
@@ -58,7 +58,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          name: { 
+          name: {
             type: "string",
             description: "Name of the folder to create"
           }
@@ -75,15 +75,15 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          to: { 
+          to: {
             type: "string",
             description: "Email address of the recipient"
           },
-          subject: { 
+          subject: {
             type: "string",
             description: "Subject of the email"
           },
-          body: { 
+          body: {
             type: "string",
             description: "Content of the email"
           }
@@ -100,15 +100,15 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          name: { 
+          name: {
             type: "string",
             description: "Name of the file to create"
           },
-          content: { 
+          content: {
             type: "string",
             description: "Content of the file"
           },
-          mimeType: { 
+          mimeType: {
             type: "string",
             description: "MIME type of the file"
           }
@@ -120,48 +120,48 @@ export const TOOL_FORMATS = {
   }
 };
 
-export async function killOllama() {
-  try {
-    console.log('Killing Ollama processes...');
-    await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-    const { stdout } = await execAsync('netstat -ano | findstr ":11434"').catch(() => ({ stdout: '' }));
-    const pids = stdout.split('\n')
-      .map(line => line.trim().split(/\s+/).pop())
-      .filter(pid => pid && /^\d+$/.test(pid));
-    
-    for (const pid of pids) {
-      await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('Ollama processes killed');
-  } catch (e) {
-    console.log('No Ollama processes found to kill');
-  }
-}
+// export async function killOllama() {
+//   try {
+//     console.log('Killing Ollama processes...');
+//     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
+//     const { stdout } = await execAsync('netstat -ano | findstr ":11434"').catch(() => ({ stdout: '' }));
+//     const pids = stdout.split('\n')
+//       .map(line => line.trim().split(/\s+/).pop())
+//       .filter(pid => pid && /^\d+$/.test(pid));
 
-export async function startOllama(): Promise<ChildProcess> {
-  console.log('Starting Ollama server...');
-  const ollamaProcess = exec('ollama serve', { windowsHide: true });
-  
-  ollamaProcess.on('error', (error) => {
-    console.error('Error starting Ollama:', error);
-  });
+//     for (const pid of pids) {
+//       await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
+//     }
 
-  ollamaProcess.stdout?.on('data', (data) => {
-    console.log('Ollama stdout:', data.toString());
-  });
+//     await new Promise(resolve => setTimeout(resolve, 5000));
+//     console.log('Ollama processes killed');
+//   } catch (e) {
+//     console.log('No Ollama processes found to kill');
+//   }
+// }
 
-  ollamaProcess.stderr?.on('data', (data) => {
-    console.error('Ollama stderr:', data.toString());
-  });
+// export async function startOllama(): Promise<ChildProcess> {
+//   console.log('Starting Ollama server...');
+//   const ollamaProcess = exec('ollama serve', { windowsHide: true });
 
-  await new Promise(resolve => setTimeout(resolve, 10000));
-  console.log('Ollama server started');
-  return ollamaProcess;
-}
+//   ollamaProcess.on('error', (error) => {
+//     console.error('Error starting Ollama:', error);
+//   });
 
-export async function makeOllamaRequest(payload: any, toolFormat: any) {
+//   ollamaProcess.stdout?.on('data', (data) => {
+//     console.log('Ollama stdout:', data.toString());
+//   });
+
+//   ollamaProcess.stderr?.on('data', (data) => {
+//     console.error('Ollama stderr:', data.toString());
+//   });
+
+//   await new Promise(resolve => setTimeout(resolve, 10000));
+//   console.log('Ollama server started');
+//   return ollamaProcess;
+// }
+
+export async function makeOllamaRequest(payload: any, toolFormat?: any) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
@@ -178,7 +178,7 @@ export async function makeOllamaRequest(payload: any, toolFormat: any) {
 
     console.log('Making request to Ollama with payload:', JSON.stringify(requestPayload, null, 2));
     const startTime = Date.now();
-    
+
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
@@ -220,7 +220,7 @@ export function parseToolResponse(result: any) {
     }
 
     const content = result.message.content;
-    
+
     // If content is already an object (from structured output), return it
     if (typeof content === 'object') {
       return content;
@@ -246,7 +246,7 @@ export async function cleanupProcess(process: ChildProcess | null) {
       const pids = stdout.split('\n')
         .map(line => line.trim().split(/\s+/).pop())
         .filter(pid => pid && /^\d+$/.test(pid));
-      
+
       for (const pid of pids) {
         await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
       }

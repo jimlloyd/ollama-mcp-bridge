@@ -10,16 +10,16 @@ const TEST_TIMEOUT = 300000; // 5 minutes
 const HOOK_TIMEOUT = 30000;  // 30 seconds for hooks
 const REQUEST_TIMEOUT = 180000; // 3 minutes per request
 
-async function killOllama() {
-  try {
-    console.log('Killing Ollama processes...');
-    await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('Ollama processes killed');
-  } catch (e) {
-    console.log('No Ollama processes found to kill');
-  }
-}
+// async function killOllama() {
+//   try {
+//     console.log('Killing Ollama processes...');
+//     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
+//     await new Promise(resolve => setTimeout(resolve, 2000));
+//     console.log('Ollama processes killed');
+//   } catch (e) {
+//     console.log('No Ollama processes found to kill');
+//   }
+// }
 
 async function makeOllamaRequest(payload: any) {
   const controller = new AbortController();
@@ -63,19 +63,19 @@ async function makeOllamaRequest(payload: any) {
 }
 
 describe('Ollama Direct Interaction Tests', () => {
-  beforeAll(async () => {
-    // Kill any existing Ollama processes before starting tests
-    await killOllama();
-    // Wait for process to fully terminate
-    await new Promise(resolve => setTimeout(resolve, 3000));
+  // beforeAll(async () => {
+  //   // Kill any existing Ollama processes before starting tests
+  //   // await killOllama();
+  //   // Wait for process to fully terminate
+  //   await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Start Ollama server once for all tests
-    console.log('Starting Ollama server...');
-    exec('ollama serve');
+  //   // Start Ollama server once for all tests
+  //   console.log('Starting Ollama server...');
+  //   exec('ollama serve');
 
-    // Wait for server to start
-    await new Promise(resolve => setTimeout(resolve, 5000));
-  }, HOOK_TIMEOUT);
+  //   // Wait for server to start
+  //   await new Promise(resolve => setTimeout(resolve, 5000));
+  // }, HOOK_TIMEOUT);
 
   it('should successfully connect to Ollama API', async () => {
 
@@ -160,7 +160,7 @@ describe('Ollama Direct Interaction Tests', () => {
     }
   }, TEST_TIMEOUT);
 
-  afterAll(async () => {
-    await killOllama();
-  }, HOOK_TIMEOUT);
+  // afterAll(async () => {
+  //   await killOllama();
+  // }, HOOK_TIMEOUT);
 });

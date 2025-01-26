@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll } from '@jest/globals';
 import { ChildProcess } from 'child_process';
-import { 
-  killOllama, 
-  startOllama, 
+import {
+  // killOllama,
+  // startOllama,
   makeOllamaRequest,
   parseToolResponse,
   TEST_TIMEOUT,
@@ -13,23 +13,23 @@ import {
 describe('Filesystem MCP Tests', () => {
   let ollamaProcess: ChildProcess | null = null;
 
-  beforeEach(async () => {
-    await killOllama();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }, HOOK_TIMEOUT);
+  // beforeEach(async () => {
+  //   await killOllama();
+  //   await new Promise(resolve => setTimeout(resolve, 3000));
+  // }, HOOK_TIMEOUT);
 
-  afterEach(async () => {
-    if (ollamaProcess) {
-      console.log('Cleaning up Ollama process...');
-      ollamaProcess.kill();
-      ollamaProcess = null;
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }, HOOK_TIMEOUT);
+  // afterEach(async () => {
+  //   if (ollamaProcess) {
+  //     console.log('Cleaning up Ollama process...');
+  //     ollamaProcess.kill();
+  //     ollamaProcess = null;
+  //     await new Promise(resolve => setTimeout(resolve, 2000));
+  //   }
+  // }, HOOK_TIMEOUT);
 
   it('should handle write_file request', async () => {
-    ollamaProcess = await startOllama();
-    
+    // ollamaProcess = await startOllama();
+
     const payload = {
       model: MODEL_NAME,
       messages: [
@@ -56,7 +56,7 @@ describe('Filesystem MCP Tests', () => {
 
   // Add more filesystem-specific tests here
 
-  afterAll(async () => {
-    await killOllama();
-  }, HOOK_TIMEOUT);
+  // afterAll(async () => {
+  //   await killOllama();
+  // }, HOOK_TIMEOUT);
 });

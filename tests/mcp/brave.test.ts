@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { ChildProcess } from 'child_process';
-import { 
-  killOllama, 
-  startOllama, 
+import {
+  // killOllama,
+  // startOllama,
   makeOllamaRequest,
   parseToolResponse,
   cleanupProcess,
@@ -12,21 +12,6 @@ import {
 } from './test-utils';
 
 describe('Brave Search MCP Tests', () => {
-  let ollamaProcess: ChildProcess | null = null;
-
-  beforeEach(async () => {
-    await killOllama();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }, HOOK_TIMEOUT);
-
-  afterEach(async () => {
-    await cleanupProcess(ollamaProcess);
-    ollamaProcess = null;
-  }, HOOK_TIMEOUT);
-
-  it('should handle web search request with single result', async () => {
-    ollamaProcess = await startOllama();
-    
     const payload = {
       model: MODEL_NAME,
       messages: [
