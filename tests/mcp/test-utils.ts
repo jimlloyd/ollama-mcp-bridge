@@ -127,51 +127,11 @@ export const TOOL_FORMATS = {
   }
 };
 
-// export async function killOllama() {
-//   try {
-//     debugProcess('Killing Ollama processes...');
-//     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-//     const { stdout } = await execAsync('netstat -ano | findstr ":11434"').catch(() => ({ stdout: '' }));
-//     const pids = stdout.split('\n')
-//       .map(line => line.trim().split(/\s+/).pop())
-//       .filter(pid => pid && /^\d+$/.test(pid));
-
-//     for (const pid of pids) {
-//       await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
-//     }
-
-//     await new Promise(resolve => setTimeout(resolve, 5000));
-//     debugProcess('Ollama processes killed');
-//   } catch (e) {
-//     debugProcess('No Ollama processes found to kill');
-//   }
-// }
-
-// export async function startOllama(): Promise<ChildProcess> {
-//   debugProcess('Starting Ollama server...');
-//   const ollamaProcess = exec('ollama serve', { windowsHide: true });
-
-//   ollamaProcess.on('error', (error) => {
-//     debugError(debugProcess, error);
-//   });
-
-//   ollamaProcess.stdout?.on('data', (data) => {
-//     debugProcess('Ollama stdout: %s', data.toString());
-//   });
-
-//   ollamaProcess.stderr?.on('data', (data) => {
-//     debugProcess('Ollama stderr: %s', data.toString());
-//   });
-
-//   await new Promise(resolve => setTimeout(resolve, 10000));
-//   debugProcess('Ollama server started');
-//   return ollamaProcess;
-// }
-
 export async function makeOllamaRequest(payload: any, toolFormat?: any) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
+  let response;
   try {
     // Add the format parameter to enforce structured output
     const requestPayload = {
@@ -186,13 +146,15 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
     debugRequest_payload(requestPayload);
     const startTime = Date.now();
 
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestPayload),
-      signal: controller.signal as any
+      signal: controller.signal as any,
+      // Disable connection pooling
+      agent: false
     });
 
     debugRequest_timing(startTime);
@@ -215,6 +177,15 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
     throw new Error('Unknown error occurred');
   } finally {
     clearTimeout(timeoutId);
+    // Ensure response body is consumed and connection is closed
+    if (response?.body) {
+      try {
+        // Use destroy() instead of cancel() for Node.js streams
+        (response.body as any).destroy();
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
   }
 }
 
@@ -260,4 +231,12 @@ export async function cleanupProcess(process: ChildProcess | null) {
       debugError(debugProcess, e);
     }
   }
+}
+
+// Add Jest global teardown
+if (typeof afterAll === 'function') {
+  afterAll(async () => {
+    // Add a small delay to allow any pending connections to close
+    await new Promise(resolve => setTimeout(resolve, 100));
+  });
 }
