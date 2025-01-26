@@ -9,7 +9,7 @@
     }
   },
   "llm": {
-    "model": "mistral",
+    "model": "phi4",
     "baseUrl": "http://localhost:11434",
     "apiKey": "ollama",
     "temperature": 0.7,
