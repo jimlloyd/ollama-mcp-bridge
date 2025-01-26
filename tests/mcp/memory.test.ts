@@ -10,6 +10,7 @@ import {
   HOOK_TIMEOUT,
   MODEL_NAME
 } from './test-utils';
+import { debugMcpTest } from '../test-debug';
 
 describe('Memory MCP Tests', () => {
   let ollamaProcess: ChildProcess | null = null;
@@ -47,7 +48,7 @@ describe('Memory MCP Tests', () => {
       options: { temperature: 0.1, num_predict: 100 }
     };
 
-    console.log('Testing store memory...');
+    debugMcpTest('Testing store memory...');
     const storeResult = await makeOllamaRequest(storePayload);
     const storeParsed = parseToolResponse(storeResult);
 
@@ -56,7 +57,7 @@ describe('Memory MCP Tests', () => {
     expect(storeParsed.tool_args.key).toBeDefined();
     expect(storeParsed.tool_args.value).toBeDefined();
 
-    console.log('Store memory response:', storeParsed);
+    debugMcpTest('Store memory response: %O', storeParsed);
 
     // Wait before next operation
     await new Promise(resolve => setTimeout(resolve, 5000));

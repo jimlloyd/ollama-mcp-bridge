@@ -2,6 +2,14 @@ import { describe, it, expect } from '@jest/globals';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import {
+  debugOllamaTest,
+  debugRequest,
+  debugRequest_payload,
+  debugRequest_timing,
+  debugRequest_response,
+  debugError
+} from './test-debug';
 
 const execAsync = promisify(exec);
 const OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -12,12 +20,12 @@ const REQUEST_TIMEOUT = 180000; // 3 minutes per request
 
 // async function killOllama() {
 //   try {
-//     console.log('Killing Ollama processes...');
+//     debugProcess('Killing Ollama processes...');
 //     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
 //     await new Promise(resolve => setTimeout(resolve, 2000));
-//     console.log('Ollama processes killed');
+//     debugProcess('Ollama processes killed');
 //   } catch (e) {
-//     console.log('No Ollama processes found to kill');
+//     debugProcess('No Ollama processes found to kill');
 //   }
 // }
 
@@ -26,7 +34,7 @@ async function makeOllamaRequest(payload: any) {
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    console.log('Making request to Ollama with payload:', JSON.stringify(payload, null, 2));
+    debugRequest_payload(payload);
     const startTime = Date.now();
 
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -38,8 +46,7 @@ async function makeOllamaRequest(payload: any) {
       signal: controller.signal as any
     });
 
-    const endTime = Date.now();
-    console.log(`Request took ${endTime - startTime}ms`);
+    debugRequest_timing(startTime);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -47,7 +54,7 @@ async function makeOllamaRequest(payload: any) {
     }
 
     const result = await response.json();
-    console.log('Received response:', JSON.stringify(result, null, 2));
+    debugRequest_response(result);
     return result;
   } catch (error) {
     if (error instanceof Error) {
@@ -70,7 +77,7 @@ describe('Ollama Direct Interaction Tests', () => {
   //   await new Promise(resolve => setTimeout(resolve, 3000));
 
   //   // Start Ollama server once for all tests
-  //   console.log('Starting Ollama server...');
+  //   debugOllamaTest('Starting Ollama server...');
   //   exec('ollama serve');
 
   //   // Wait for server to start
@@ -78,12 +85,11 @@ describe('Ollama Direct Interaction Tests', () => {
   // }, HOOK_TIMEOUT);
 
   it('should successfully connect to Ollama API', async () => {
-
-    console.log('Testing connection...');
+    debugOllamaTest('Testing connection...');
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
     expect(response.ok).toBe(true);
     const result = await response.json();
-    console.log('Available models:', JSON.stringify(result, null, 2));
+    debugOllamaTest('Available models: %O', result);
   }, TEST_TIMEOUT);
 
   it('should test ultra minimal prompt', async () => {
@@ -111,13 +117,13 @@ describe('Ollama Direct Interaction Tests', () => {
       .replace(/\`\`\`json\n?/g, '')
       .replace(/\n?\`\`\`/g, '')
       .trim();
-    console.log('Response content:', content);
+    debugOllamaTest('Response content: %s', content);
 
     try {
       const parsed = JSON.parse(content);
-      console.log('Parsed response:', parsed);
+      debugOllamaTest('Parsed response: %O', parsed);
     } catch (e) {
-      console.error('Failed to parse response as JSON');
+      debugError(debugOllamaTest, 'Failed to parse response as JSON');
     }
   }, TEST_TIMEOUT);
 
@@ -147,16 +153,16 @@ describe('Ollama Direct Interaction Tests', () => {
         .replace(/\`\`\`json\n?/g, '')
         .replace(/\n?\`\`\`/g, '')
         .trim();
-      console.log('Response content:', content);
+      debugOllamaTest('Response content: %s', content);
 
       try {
         const parsed = JSON.parse(content);
-        console.log('Parsed response:', parsed);
+        debugOllamaTest('Parsed response: %O', parsed);
       } catch (e) {
-        console.error('Failed to parse response as JSON');
+        debugError(debugOllamaTest, 'Failed to parse response as JSON');
       }
     } catch (error) {
-      console.error('Request failed:', error);
+      debugError(debugOllamaTest, error);
     }
   }, TEST_TIMEOUT);
 

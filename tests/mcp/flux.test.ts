@@ -10,6 +10,7 @@ import {
   HOOK_TIMEOUT,
   MODEL_NAME
 } from './test-utils';
+import { debugMcpTest } from '../test-debug';
 
 describe('Flux Image Generation Tests', () => {
   let ollamaProcess: ChildProcess | null = null;
@@ -52,7 +53,7 @@ describe('Flux Image Generation Tests', () => {
     expect(parsed.tool_args.prompt).toBeDefined();
 
     // Once tool is called, the bridge should receive a response with URLs
-    console.log('Tool response format:', parsed);
+    debugMcpTest('Tool response format: %O', parsed);
   }, TEST_TIMEOUT);
 
   it('should handle image generation with specific parameters', async () => {
@@ -84,6 +85,6 @@ describe('Flux Image Generation Tests', () => {
     expect(parsed.tool_args.aspect_ratio).toBe('16:9');
     expect(parsed.tool_args.go_fast).toBe(true);
 
-    console.log('Tool response with parameters:', parsed);
+    debugMcpTest('Tool response with parameters: %O', parsed);
   }, TEST_TIMEOUT);
 });

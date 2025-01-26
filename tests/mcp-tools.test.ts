@@ -2,6 +2,13 @@ import { describe, it, expect } from '@jest/globals';
 import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import {
+  debugMcpTest,
+  debugRequest_payload,
+  debugRequest_timing,
+  debugRequest_response,
+  debugError
+} from './test-debug';
 
 const execAsync = promisify(exec);
 const OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -15,7 +22,7 @@ async function makeOllamaRequest(payload: any) {
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    console.log('Making request to Ollama with payload:', JSON.stringify(payload, null, 2));
+    debugRequest_payload(payload);
     const startTime = Date.now();
 
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -24,11 +31,10 @@ async function makeOllamaRequest(payload: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: controller.signal
+      signal: controller.signal as any
     });
 
-    const endTime = Date.now();
-    console.log(`Request took ${endTime - startTime}ms`);
+    debugRequest_timing(startTime);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -36,7 +42,7 @@ async function makeOllamaRequest(payload: any) {
     }
 
     const result = await response.json();
-    console.log('Received response:', JSON.stringify(result, null, 2));
+    debugRequest_response(result);
     return result;
   } catch (error) {
     if (error instanceof Error) {
@@ -72,6 +78,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Filesystem write_file test completed');
     }, TEST_TIMEOUT);
   });
 
@@ -95,6 +102,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Brave search test completed');
     }, TEST_TIMEOUT);
   });
 
@@ -118,6 +126,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('GitHub repository search test completed');
     }, TEST_TIMEOUT);
   });
 
@@ -141,6 +150,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Flux image generation test completed');
     }, TEST_TIMEOUT);
   });
 
@@ -164,6 +174,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Memory operation test completed');
     }, TEST_TIMEOUT);
   });
 });

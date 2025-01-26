@@ -1,6 +1,13 @@
 import fetch from 'node-fetch';
 import { exec, ChildProcess } from 'child_process';
 import { promisify } from 'util';
+import {
+  debugProcess,
+  debugRequest_payload,
+  debugRequest_timing,
+  debugRequest_response,
+  debugError
+} from '../test-debug';
 
 const execAsync = promisify(exec);
 
@@ -122,7 +129,7 @@ export const TOOL_FORMATS = {
 
 // export async function killOllama() {
 //   try {
-//     console.log('Killing Ollama processes...');
+//     debugProcess('Killing Ollama processes...');
 //     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
 //     const { stdout } = await execAsync('netstat -ano | findstr ":11434"').catch(() => ({ stdout: '' }));
 //     const pids = stdout.split('\n')
@@ -134,30 +141,30 @@ export const TOOL_FORMATS = {
 //     }
 
 //     await new Promise(resolve => setTimeout(resolve, 5000));
-//     console.log('Ollama processes killed');
+//     debugProcess('Ollama processes killed');
 //   } catch (e) {
-//     console.log('No Ollama processes found to kill');
+//     debugProcess('No Ollama processes found to kill');
 //   }
 // }
 
 // export async function startOllama(): Promise<ChildProcess> {
-//   console.log('Starting Ollama server...');
+//   debugProcess('Starting Ollama server...');
 //   const ollamaProcess = exec('ollama serve', { windowsHide: true });
 
 //   ollamaProcess.on('error', (error) => {
-//     console.error('Error starting Ollama:', error);
+//     debugError(debugProcess, error);
 //   });
 
 //   ollamaProcess.stdout?.on('data', (data) => {
-//     console.log('Ollama stdout:', data.toString());
+//     debugProcess('Ollama stdout: %s', data.toString());
 //   });
 
 //   ollamaProcess.stderr?.on('data', (data) => {
-//     console.error('Ollama stderr:', data.toString());
+//     debugProcess('Ollama stderr: %s', data.toString());
 //   });
 
 //   await new Promise(resolve => setTimeout(resolve, 10000));
-//   console.log('Ollama server started');
+//   debugProcess('Ollama server started');
 //   return ollamaProcess;
 // }
 
@@ -176,7 +183,7 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
       }
     };
 
-    console.log('Making request to Ollama with payload:', JSON.stringify(requestPayload, null, 2));
+    debugRequest_payload(requestPayload);
     const startTime = Date.now();
 
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -185,11 +192,10 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestPayload),
-      signal: controller.signal
+      signal: controller.signal as any
     });
 
-    const endTime = Date.now();
-    console.log(`Request took ${endTime - startTime}ms`);
+    debugRequest_timing(startTime);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -197,7 +203,7 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
     }
 
     const result = await response.json();
-    console.log('Raw response:', JSON.stringify(result, null, 2));
+    debugRequest_response(result);
     return result;
   } catch (error) {
     if (error instanceof Error) {
@@ -215,7 +221,7 @@ export async function makeOllamaRequest(payload: any, toolFormat?: any) {
 export function parseToolResponse(result: any) {
   try {
     if (!result?.message?.content) {
-      console.error('Invalid response structure:', result);
+      debugError(debugProcess, 'Invalid response structure');
       throw new Error('Invalid response structure');
     }
 
@@ -229,14 +235,14 @@ export function parseToolResponse(result: any) {
     // Otherwise parse it (fallback for older Ollama versions)
     return JSON.parse(content.trim());
   } catch (e) {
-    console.error('Failed to parse response:', result?.message?.content);
+    debugError(debugProcess, `Failed to parse response: ${result?.message?.content}`);
     throw e;
   }
 }
 
 export async function cleanupProcess(process: ChildProcess | null) {
   if (process) {
-    console.log('Cleaning up process...');
+    debugProcess('Cleaning up process...');
     try {
       process.kill();
       if (process.pid) {
@@ -251,7 +257,7 @@ export async function cleanupProcess(process: ChildProcess | null) {
         await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
       }
     } catch (e) {
-      console.error('Error during process cleanup:', e);
+      debugError(debugProcess, e);
     }
   }
 }
