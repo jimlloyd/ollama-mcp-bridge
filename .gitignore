@@ -16,4 +16,7 @@ __pycache__/
 *.pyc
 
 # Logs
-*.log
+*.logdist/
+
+dist/
+build/
