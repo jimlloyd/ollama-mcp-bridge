@@ -1,5 +1,4 @@
 import { describe, it, expect } from '@jest/globals';
-import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import {
@@ -31,7 +30,7 @@ async function makeOllamaRequest(payload: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: controller.signal as any
+      signal: controller.signal
     });
 
     debugRequest_timing(startTime);

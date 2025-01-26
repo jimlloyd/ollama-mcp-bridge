@@ -1,10 +1,8 @@
 import { describe, it, expect } from '@jest/globals';
-import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import {
   debugOllamaTest,
-  debugRequest,
   debugRequest_payload,
   debugRequest_timing,
   debugRequest_response,
@@ -17,17 +15,6 @@ const MODEL_NAME = 'qwen2.5-coder:7b-instruct';
 const TEST_TIMEOUT = 300000; // 5 minutes
 const HOOK_TIMEOUT = 30000;  // 30 seconds for hooks
 const REQUEST_TIMEOUT = 180000; // 3 minutes per request
-
-// async function killOllama() {
-//   try {
-//     debugProcess('Killing Ollama processes...');
-//     await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-//     await new Promise(resolve => setTimeout(resolve, 2000));
-//     debugProcess('Ollama processes killed');
-//   } catch (e) {
-//     debugProcess('No Ollama processes found to kill');
-//   }
-// }
 
 async function makeOllamaRequest(payload: any) {
   const controller = new AbortController();
@@ -43,7 +30,7 @@ async function makeOllamaRequest(payload: any) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: controller.signal as any
+      signal: controller.signal
     });
 
     debugRequest_timing(startTime);
@@ -70,20 +57,6 @@ async function makeOllamaRequest(payload: any) {
 }
 
 describe('Ollama Direct Interaction Tests', () => {
-  // beforeAll(async () => {
-  //   // Kill any existing Ollama processes before starting tests
-  //   // await killOllama();
-  //   // Wait for process to fully terminate
-  //   await new Promise(resolve => setTimeout(resolve, 3000));
-
-  //   // Start Ollama server once for all tests
-  //   debugOllamaTest('Starting Ollama server...');
-  //   exec('ollama serve');
-
-  //   // Wait for server to start
-  //   await new Promise(resolve => setTimeout(resolve, 5000));
-  // }, HOOK_TIMEOUT);
-
   it('should successfully connect to Ollama API', async () => {
     debugOllamaTest('Testing connection...');
     const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
@@ -141,10 +114,7 @@ describe('Ollama Direct Interaction Tests', () => {
         }
       ],
       stream: false,
-      options: {
-        temperature: 0.1,
-        num_predict: 100
-      }
+      options: { temperature: 0.1, num_predict: 100 }
     };
 
     try {
@@ -165,8 +135,4 @@ describe('Ollama Direct Interaction Tests', () => {
       debugError(debugOllamaTest, error);
     }
   }, TEST_TIMEOUT);
-
-  // afterAll(async () => {
-  //   await killOllama();
-  // }, HOOK_TIMEOUT);
 });
