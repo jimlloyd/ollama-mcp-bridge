@@ -66,23 +66,23 @@ export class LLMClient {
   }
 
   public async listTools(): Promise<void> {
-    logger.info('===== Available Tools =====');
+    console.info('===== Available Tools =====');
     if (this.tools.length === 0) {
-      logger.info('No tools available');
+      console.info('No tools available');
       return;
     }
 
     for (const tool of this.tools) {
-      logger.info(bold('\nTool Details:'));
-      logger.info(`Name: ${bold(tool.function.name)}`);
-      logger.info(`Description: ${tool.function.description}`);
+      console.info(bold('\nTool Details:'));
+      console.info(`Name: ${bold(tool.function.name)}`);
+      console.info(`Description: ${tool.function.description}`);
       if (tool.function.parameters) {
-        logger.info('Parameters:');
-        logger.info(JSON.stringify(tool.function.parameters, null, 2));
+        console.info('Parameters:');
+        console.info(JSON.stringify(tool.function.parameters, null, 2));
       }
-      logger.info('------------------------');
+      console.info('------------------------');
     }
-    logger.info(`Total tools available: ${this.tools.length}`);
+    console.info(`Total tools available: ${this.tools.length}`);
   }
 
   private async testConnection(): Promise<boolean> {
