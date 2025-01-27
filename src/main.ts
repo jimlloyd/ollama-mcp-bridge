@@ -1,8 +1,10 @@
 import readline from 'readline';
 import { MCPLLMBridge } from './bridge';
 import { loadBridgeConfig } from './config';
-import { logger } from './logger';
 import { BridgeConfig } from './types';
+
+import Debug from 'debug-level';
+const logger = new Debug('main');
 
 const rl = readline.createInterface({
   input: process.stdin,

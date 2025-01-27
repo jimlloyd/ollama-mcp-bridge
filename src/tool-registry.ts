@@ -1,5 +1,7 @@
 import { Tool, ToolRegistry, MCPToolMetadata } from './types';
-import { logger } from './logger';
+
+import Debug from 'debug-level';
+const logger = new Debug('tool-registry');
 
 export class DynamicToolRegistry {
   private registry: ToolRegistry = {};
@@ -72,7 +74,7 @@ export class DynamicToolRegistry {
 
   detectToolFromPrompt(prompt: string): string | null {
     prompt = prompt.toLowerCase();
-    
+
     // Check each tool's keywords
     for (const [toolName, metadata] of Object.entries(this.registry)) {
       for (const keyword of metadata.keywords) {

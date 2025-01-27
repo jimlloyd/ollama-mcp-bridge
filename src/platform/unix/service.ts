@@ -2,8 +2,10 @@ import { BaseServiceManager } from '../../service/base';
 import { ServiceError, ProcessError, PlatformError } from '../../service/errors';
 import { ServiceConfig } from '../../service/types';
 import { createHealthChecker } from '../../service/health';
-import { logger } from '../../logger';
 import { UnixProcessManager } from './process';
+
+import Logger from 'debug-level';
+const logger = new Logger('service:unix');
 
 /**
  * Unix-specific service manager implementation

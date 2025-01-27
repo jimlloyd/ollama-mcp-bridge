@@ -1,8 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { logger } from './logger';
 import { ServerParameters } from './types';
+
+import Debug from 'debug-level';
+const logger = new Debug('config');
 
 export interface BridgeConfigFile {
   mcpServers: {
@@ -21,7 +23,7 @@ export interface BridgeConfigFile {
 const DEFAULT_CONFIG: BridgeConfigFile = {
   mcpServers: {
     filesystem: {
-      command: process.platform === 'win32' 
+      command: process.platform === 'win32'
         ? 'C:\\Program Files\\nodejs\\node.exe'
         : 'node',
       args: [
@@ -45,7 +47,7 @@ export async function loadBridgeConfig(): Promise<BridgeConfigFile> {
   // Change to look for config in the project directory
   const projectDir = path.resolve(__dirname, '..');
   const configPath = path.join(projectDir, 'bridge_config.json');
-  
+
   try {
     const configData = await fs.readFile(configPath, 'utf-8');
     const config = JSON.parse(configData);

@@ -1,7 +1,9 @@
 import { ServiceManager, ServiceConfig } from './types';
 import { UnixServiceManager } from '../platform/unix/service';
 import { WindowsServiceManager } from '../platform/windows/service';
-import { logger } from '../logger';
+
+import Logger from 'debug-level';
+const logger = new Logger('factory');
 
 /**
  * Factory for creating platform-specific service managers

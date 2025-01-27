@@ -1,8 +1,13 @@
 import { type LLMConfig } from './types';
-import { logger } from './logger';
 import { DynamicToolRegistry } from './tool-registry';
 import { toolSchemas } from './types/tool-schemas';
 import { createServiceManager, type ServiceConfig } from './service';
+import chalk from 'chalk';
+
+const bold = chalk.bold.blue;
+
+import Debug from 'debug-level';
+const logger = new Debug('llm-client');
 
 interface OllamaResponse {
   model: string;
@@ -68,8 +73,8 @@ export class LLMClient {
     }
 
     for (const tool of this.tools) {
-      logger.info('\nTool Details:');
-      logger.info(`Name: ${tool.function.name}`);
+      logger.info(bold('\nTool Details:'));
+      logger.info(`Name: ${bold(tool.function.name)}`);
       logger.info(`Description: ${tool.function.description}`);
       if (tool.function.parameters) {
         logger.info('Parameters:');

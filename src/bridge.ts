@@ -1,8 +1,10 @@
 import { MCPClient } from './mcp-client';
 import { LLMClient } from './llm-client';
-import { logger } from './logger';
 import { BridgeConfig, Tool } from './types';
 import { DynamicToolRegistry } from './tool-registry';
+
+import Debug from 'debug-level';
+const logger = new Debug('bridge');
 
 interface MCPMap {
   [key: string]: MCPClient;
@@ -179,7 +181,6 @@ export class MCPLLMBridge implements MCPLLMBridge {
 
         logger.info(`[MCP] Sending call to MCP...`);
         const result = await Promise.race([mcpCallPromise, timeoutPromise]);
-        logger.info(`[MCP] Received response from MCP: <<${typeof result}>>`);
 
         const output: string = typeof result === 'string' ? result : JSON.stringify(result);
         logger.debug(`[MCP] Tool result: <<${output}>>`);
