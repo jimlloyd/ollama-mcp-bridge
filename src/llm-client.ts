@@ -155,10 +155,12 @@ export class LLMClient {
           }
 
           // Format according to Ollama's function call response format
-          // Add tool response as a simple message
+          // Add tool response with correct role and tool_call_id
           this.messages.push({
-            role: 'assistant',
-            content: outputContent
+            role: 'tool',
+            content: outputContent,
+            name: result.tool_name || '',
+            tool_call_id: result.tool_call_id
           });
         }
       }
@@ -278,7 +280,7 @@ export class LLMClient {
         toolCalls
       };
 
-      // Add assistant's response as a simple message
+      // Add the response to messages
       this.messages.push({
         role: 'assistant',
         content: result.content
