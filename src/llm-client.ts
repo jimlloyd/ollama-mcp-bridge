@@ -57,7 +57,7 @@ export class LLMClient {
 
   setToolRegistry(registry: DynamicToolRegistry) {
     this.toolRegistry = registry;
-    logger.debug('Tool registry set with tools:', registry.getAllTools());
+    logger.debug(`Tool registry set with tools: ${JSON.stringify(registry.getAllTools(), null, 2)}`);
   }
 
   public async listTools(): Promise<void> {
@@ -201,15 +201,15 @@ export class LLMClient {
           if (toolSchema) {
             payload.format.properties.arguments = toolSchema;
             payload.format.properties.name.const = this.currentTool;
-            logger.debug('Added specific tool schema:', this.currentTool);
+            logger.debug('Added specific tool schema', { tool: this.currentTool });
           }
         }
 
-        logger.debug('Using format schema:', JSON.stringify(payload.format, null, 2));
+        logger.debug(`Using format schema: ${JSON.stringify(payload.format, null, 2)}`);
       }
 
-      logger.debug('Prepared messages for Ollama:', JSON.stringify(messages, null, 2));
-      logger.debug('Preparing Ollama request with payload:', JSON.stringify(payload, null, 2));
+      logger.debug(`Prepared messages for Ollama: ${JSON.stringify(messages, null, 2)}`);
+      logger.debug(`Preparing Ollama request: ${JSON.stringify(payload, null, 2)}`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -231,17 +231,13 @@ export class LLMClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error('Ollama request failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
+        logger.error(`Ollama request failed: status=${response.status}, statusText=${response.statusText}, details=${errorText}`);
         throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
 
       logger.debug('Response received from Ollama, parsing...');
       const completion = await response.json() as OllamaResponse;
-      logger.debug('Parsed response:', completion);
+      logger.debug(`Parsed response: ${JSON.stringify(completion, null, 2)}`);
 
       let isToolCall = false;
       let toolCalls: ToolCall[] = [];
@@ -263,8 +259,10 @@ export class LLMClient {
                 arguments: JSON.stringify(contentObj.arguments)
               }
             }];
-            content = contentObj.thoughts || "Using tool...";
-            logger.debug('Parsed structured tool call:', { toolCalls });
+            // Log the structured tool call details at debug level
+            logger.debug(`Tool call details: ${JSON.stringify(contentObj, null, 2)}`);
+            content = ''; // Don't include thoughts in regular output
+            logger.debug(`Parsed structured tool call: ${JSON.stringify(toolCalls, null, 2)}`);
           }
         } catch (e) {
           logger.debug('Response is not a structured tool call:', e);

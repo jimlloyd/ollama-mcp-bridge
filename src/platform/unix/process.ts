@@ -1,7 +1,7 @@
 import { exec, type ExecOptions } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../../logger';
-import { ProcessManager, ProcessInfo } from '../types';
+import { ProcessManager, ProcessInfo } from '../../platform/types';
 
 const execAsync = promisify(exec);
 
@@ -27,10 +27,16 @@ export class UnixProcessManager implements ProcessManager {
 
     // Handle output to prevent buffer issues
     process.stdout?.on('data', (data) => {
-      logger.debug(`${command} stdout:`, data.toString());
+      const output = data.toString().trim();
+      if (output) {
+        logger.verbose(`${command} stdout ${output}`, { output });
+      }
     });
     process.stderr?.on('data', (data) => {
-      logger.debug(`${command} stderr:`, data.toString());
+      const output = data.toString().trim();
+      if (output) {
+        logger.debug(`${command} stderr ${output}`, { output });
+      }
     });
 
     // Detach process

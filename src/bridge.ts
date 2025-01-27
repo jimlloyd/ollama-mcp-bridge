@@ -124,7 +124,29 @@ export class MCPLLMBridge implements MCPLLMBridge {
         response = await this.llmClient.invoke(toolResponses);
       }
 
-      return response.content;
+      // For tool responses, return only the tool output
+      // For regular responses, return the content
+      if (response.isToolCall) {
+        // Wait for tool response before returning
+        const toolResponses = await this.handleToolCalls(response.toolCalls);
+        if (toolResponses.length > 0) {
+          // Return just the tool output
+          const toolOutput = toolResponses[0].output;
+          try {
+            const parsed = JSON.parse(toolOutput);
+            if (parsed.content && Array.isArray(parsed.content)) {
+              return parsed.content
+                .filter((item: any) => item.type === 'text')
+                .map((item: any) => item.text)
+                .join('\n');
+            }
+            return String(toolOutput);
+          } catch (e) {
+            return String(toolOutput);
+          }
+        }
+      }
+      return response.content || '';
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
       logger.error(`Error processing message: ${errorMsg}`);
@@ -157,13 +179,15 @@ export class MCPLLMBridge implements MCPLLMBridge {
 
         logger.info(`[MCP] Sending call to MCP...`);
         const result = await Promise.race([mcpCallPromise, timeoutPromise]);
-        logger.info(`[MCP] Received response from MCP`);
-        logger.debug(`[MCP] Tool result:`, result);
+        logger.info(`[MCP] Received response from MCP: <<${typeof result}>>`);
+
+        const output: string = typeof result === 'string' ? result : JSON.stringify(result);
+        logger.debug(`[MCP] Tool result: <<${output}>>`);
 
         toolResponses.push({
           tool_call_id: toolCall.id,
           tool_name: requestedName,
-          output: typeof result === 'string' ? result : JSON.stringify(result)
+          output
         });
       } catch (error: any) {
         logger.error(`[MCP] Tool execution failed with error:`, error);
