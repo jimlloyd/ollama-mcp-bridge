@@ -4,7 +4,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
-    "start": "ts-node src/main.ts",
+    "start": "tsc && ts-node src/main.ts",
     "test": "jest --runInBand",
     "test:ollama": "jest tests/ollama.test.ts --runInBand",
     "test:filesystem": "jest tests/mcp/filesystem.test.ts --runInBand --detectOpenHandles --forceExit",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "chalk": "^4.1.2",
+    "debug-level": "^3.2.1",
     "dotenv": "^16.0.3",
     "openai": "^4.0.0",
     "winston": "^3.8.2"
