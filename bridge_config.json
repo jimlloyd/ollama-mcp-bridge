@@ -4,16 +4,16 @@
       "command": "node",
       "args": [
         "/opt/homebrew/lib/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-        "/Users/jim.lloyd/MCPData/bridgeworkspace"
+        "/Users/jim.lloyd/MCPData"
       ]
     }
   },
   "llm": {
-    "model": "qwen2.5-coder:14b",
+    "model": "qwen2.5:14b",
     "baseUrl": "http://localhost:11434",
     "apiKey": "ollama",
     "temperature": 0.7,
     "maxTokens": 1000
   },
-  "systemPrompt": "You are a helpful assistant that can use various tools to help answer questions. When using a tool, you respond with a properly formated JSON object, not Markdown containing a JSON code fence."
+  "systemPrompt": "You are a helpful assistant that can use various tools to help answer questions. Special instructions for tool use: When you want to use a tool, you respond with a properly formated JSON object, not Markdown containing a JSON code fence. You'll be privately given the tool's response (the user won't automatically see it). You should incorporate the tool response into your response to the user, by default simply copying the full tool response, although you may summarize if you think the user will benefit from a summary. Do not confabulate your response -- be factual."
 }
