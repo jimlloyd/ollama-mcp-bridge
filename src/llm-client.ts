@@ -86,6 +86,8 @@ export class LLMClient {
 
   private prepareMessages(): any[] {
     const formattedMessages = [];
+
+    // Add system prompt if present
     if (this.systemPrompt) {
       formattedMessages.push({
         role: 'system',
@@ -93,7 +95,14 @@ export class LLMClient {
       });
     }
 
-    formattedMessages.push(...this.messages);
+    // Add all messages with simple role/content structure
+    for (const message of this.messages) {
+      formattedMessages.push({
+        role: message.role,
+        content: message.content
+      });
+    }
+
     return formattedMessages;
   }
 
@@ -128,31 +137,29 @@ export class LLMClient {
         for (const result of toolResults) {
           // Convert MCP response to proper Ollama tool call format
           const toolOutput = result.output;
-          // Format tool response according to Ollama's expected structure
-          const formattedResponse = {
-            role: 'tool',
-            name: result.tool_name || '',
-            content: '',
-            tool_call_id: result.tool_call_id
-          };
-
+          let outputContent = '';
           try {
             const parsedOutput = JSON.parse(toolOutput);
             if (parsedOutput.content && Array.isArray(parsedOutput.content)) {
               // Extract text content from MCP response
-              formattedResponse.content = parsedOutput.content
+              outputContent = parsedOutput.content
                 .filter((item: any) => item.type === 'text')
                 .map((item: any) => item.text)
                 .join('\n');
             } else {
-              formattedResponse.content = String(toolOutput);
+              outputContent = String(toolOutput);
             }
           } catch (e) {
             // If not JSON, use as-is
-            formattedResponse.content = String(toolOutput);
+            outputContent = String(toolOutput);
           }
 
-          this.messages.push(formattedResponse);
+          // Format according to Ollama's function call response format
+          // Add tool response as a simple message
+          this.messages.push({
+            role: 'assistant',
+            content: outputContent
+          });
         }
       }
 
@@ -167,30 +174,41 @@ export class LLMClient {
         }
       };
 
-      // Add structured output format if a tool is detected
-      if (this.currentTool) {
-        const toolSchema = this.currentTool ? this.toolSchemas[this.currentTool as keyof typeof toolSchemas] : null;
-        if (toolSchema) {
-          payload.format = {
-            type: "object",
-            properties: {
-              name: {
-                type: "string",
-                const: this.currentTool
-              },
-              arguments: toolSchema,
-              thoughts: {
-                type: "string",
-                description: "Your thoughts about using this tool"
-              }
+      // Only use structured output format for initial requests, not tool responses
+      if (toolResults.length === 0) {
+        payload.format = {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              enum: this.tools.map(t => t.function.name)
             },
-            required: ["name", "arguments", "thoughts"]
-          };
-          logger.debug('Added format schema for tool:', this.currentTool);
-          logger.debug('Schema:', JSON.stringify(payload.format, null, 2));
+            arguments: {
+              type: "object",
+              additionalProperties: true
+            },
+            thoughts: {
+              type: "string",
+              description: "Your thoughts about the response or tool usage"
+            }
+          },
+          required: ["name", "arguments", "thoughts"]
+        };
+
+        // If a specific tool is detected, add its schema
+        if (this.currentTool) {
+          const toolSchema = this.currentTool ? this.toolSchemas[this.currentTool as keyof typeof toolSchemas] : null;
+          if (toolSchema) {
+            payload.format.properties.arguments = toolSchema;
+            payload.format.properties.name.const = this.currentTool;
+            logger.debug('Added specific tool schema:', this.currentTool);
+          }
         }
+
+        logger.debug('Using format schema:', JSON.stringify(payload.format, null, 2));
       }
 
+      logger.debug('Prepared messages for Ollama:', JSON.stringify(messages, null, 2));
       logger.debug('Preparing Ollama request with payload:', JSON.stringify(payload, null, 2));
 
       const controller = new AbortController();
@@ -229,26 +247,31 @@ export class LLMClient {
       let toolCalls: ToolCall[] = [];
       let content: any = completion.message.content;
 
-      // Parse the structured response
-      try {
-        // Handle both string and object responses
-        const contentObj = typeof content === 'string' ? JSON.parse(content) : content;
+      // Only parse as tool call if this wasn't a tool response
+      if (toolResults.length === 0) {
+        try {
+          // Handle both string and object responses
+          const contentObj = typeof content === 'string' ? JSON.parse(content) : content;
 
-        // Check if response matches our structured format
-        if (contentObj.name && contentObj.arguments) {
-          isToolCall = true;
-          toolCalls = [{
-            id: `call-${Date.now()}`,
-            function: {
-              name: contentObj.name,
-              arguments: JSON.stringify(contentObj.arguments)
-            }
-          }];
-          content = contentObj.thoughts || "Using tool...";
-          logger.debug('Parsed structured tool call:', { toolCalls });
+          // Check if response matches our structured format
+          if (contentObj.name && contentObj.arguments) {
+            isToolCall = true;
+            toolCalls = [{
+              id: `call-${Date.now()}`,
+              function: {
+                name: contentObj.name,
+                arguments: JSON.stringify(contentObj.arguments)
+              }
+            }];
+            content = contentObj.thoughts || "Using tool...";
+            logger.debug('Parsed structured tool call:', { toolCalls });
+          }
+        } catch (e) {
+          logger.debug('Response is not a structured tool call:', e);
         }
-      } catch (e) {
-        logger.debug('Response is not a structured tool call:', e);
+      } else {
+        // For tool responses, just use the content directly
+        logger.debug('Using tool response content directly');
       }
 
       const result = {
@@ -257,25 +280,11 @@ export class LLMClient {
         toolCalls
       };
 
-      if (result.isToolCall) {
-        this.messages.push({
-          role: 'assistant',
-          content: result.content,
-          tool_calls: result.toolCalls?.map(call => ({
-            id: call.id,
-            type: 'function',
-            function: {
-              name: call.function.name,
-              arguments: call.function.arguments
-            }
-          }))
-        });
-      } else {
-        this.messages.push({
-          role: 'assistant',
-          content: result.content
-        });
-      }
+      // Add assistant's response as a simple message
+      this.messages.push({
+        role: 'assistant',
+        content: result.content
+      });
 
       return result;
     } catch (error: any) {
