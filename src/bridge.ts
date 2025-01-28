@@ -106,6 +106,7 @@ export class MCPLLMBridge implements MCPLLMBridge {
       const detectedTool = this.toolRegistry.detectToolFromPrompt(message);
       logger.info(`Detected tool: ${detectedTool}`);
 
+      // Set appropriate instructions based on whether it's an initial tool call
       if (detectedTool) {
         const instructions = this.toolRegistry.getToolInstructions(detectedTool);
         if (instructions) {
@@ -126,28 +127,8 @@ export class MCPLLMBridge implements MCPLLMBridge {
         response = await this.llmClient.invoke(toolResponses);
       }
 
-      // For tool responses, return only the tool output
-      // For regular responses, return the content
-      if (response.isToolCall) {
-        // Wait for tool response before returning
-        const toolResponses = await this.handleToolCalls(response.toolCalls);
-        if (toolResponses.length > 0) {
-          // Return just the tool output
-          const toolOutput = toolResponses[0].output;
-          try {
-            const parsed = JSON.parse(toolOutput);
-            if (parsed.content && Array.isArray(parsed.content)) {
-              return parsed.content
-                .filter((item: any) => item.type === 'text')
-                .map((item: any) => item.text)
-                .join('\n');
-            }
-            return String(toolOutput);
-          } catch (e) {
-            return String(toolOutput);
-          }
-        }
-      }
+      // Return the content directly - it will already be properly formatted
+      // by the LLM based on whether it's a tool response or not
       return response.content || '';
     } catch (error: any) {
       const errorMsg = error?.message || String(error);

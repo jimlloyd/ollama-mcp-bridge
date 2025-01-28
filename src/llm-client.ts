@@ -140,37 +140,53 @@ export class LLMClient {
     try {
       if (toolResults.length > 0) {
         for (const result of toolResults) {
-          // Convert MCP response to proper Ollama tool call format
-          const toolOutput = result.output;
           let outputContent = '';
           try {
-            const parsedOutput = JSON.parse(toolOutput);
+            const parsedOutput = JSON.parse(result.output);
             if (parsedOutput.content && Array.isArray(parsedOutput.content)) {
-              // Extract text content from MCP response
               outputContent = parsedOutput.content
                 .filter((item: any) => item.type === 'text')
                 .map((item: any) => item.text)
                 .join('\n');
             } else {
-              outputContent = String(toolOutput);
+              outputContent = String(result.output);
             }
           } catch (e) {
-            // If not JSON, use as-is
-            outputContent = String(toolOutput);
+            outputContent = String(result.output);
           }
 
-          // Format according to Ollama's function call response format
-          // Add tool response with correct role and tool_call_id
+          // Use Ollama's native tool message role
           this.messages.push({
             role: 'tool',
             content: outputContent,
-            name: result.tool_name || '',
+            name: result.tool_name,
             tool_call_id: result.tool_call_id
           });
         }
+
+        // Add a system message to guide the response format
+        this.messages.unshift({
+          role: 'system',
+          content: 'Provide a natural language response based on the tool output.'
+        });
       }
 
-      const messages = this.prepareMessages();
+      // Prepare base messages
+      let messages = this.prepareMessages();
+
+      // For tool responses, replace system prompt with instruction for natural language
+      if (toolResults.length > 0) {
+        messages = messages.map(msg => {
+          if (msg.role === 'system') {
+            return {
+              role: 'system',
+              content: 'Provide a natural language response based on the tool output. Do not use JSON formatting.'
+            };
+          }
+          return msg;
+        });
+      }
+
       const payload: any = {
         model: this.config.model,
         messages,
@@ -181,7 +197,7 @@ export class LLMClient {
         }
       };
 
-      // Only use structured output format for initial requests, not tool responses
+      // Only use structured output format for initial requests
       if (toolResults.length === 0) {
         payload.format = {
           type: "object",
