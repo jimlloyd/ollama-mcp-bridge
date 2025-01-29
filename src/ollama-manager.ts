@@ -2,7 +2,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 import Debug from 'debug-level';
-const logger = new Debug('ollama-manager');
+const logger = new Debug('ollama_manager');
 
 const execAsync = promisify(exec);
 
