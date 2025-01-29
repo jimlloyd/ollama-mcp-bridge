@@ -1,15 +1,8 @@
 import { MCPLLMBridge } from '../bridge';
 import { createServiceManager, ServiceConfig } from '../service';
-import { logger } from '../logger';
 
-// Mock the logger to prevent noise during tests
-jest.mock('../logger', () => ({
-  logger: {
-    info: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn()
-  }
-}));
+import Debug from 'debug-level';
+const logger = new Debug('integration:test');
 
 describe('Service Integration', () => {
   let serviceManager: ReturnType<typeof createServiceManager>;
