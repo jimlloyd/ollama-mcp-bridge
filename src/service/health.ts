@@ -1,6 +1,8 @@
-import { logger } from '../logger';
 import { ServiceStatus } from './types';
 import { HealthCheckError, TimeoutError } from './errors';
+
+import Debug from 'debug-level';
+const logger = new Debug('health');
 
 export interface HealthCheckConfig {
   timeout: number;

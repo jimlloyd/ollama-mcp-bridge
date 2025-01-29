@@ -1,7 +1,9 @@
 import { ServiceManager, ServiceStatus, ServiceConfig } from './types';
-import { logger } from '../logger';
 import { HealthChecker, createHealthChecker, waitForHealth } from './health';
 import { ServiceError } from './errors';
+
+import Debug from 'debug-level';
+const logger = new Debug('base');
 
 /**
  * Base service manager implementation providing common functionality
