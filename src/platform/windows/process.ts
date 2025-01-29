@@ -1,6 +1,8 @@
 import { exec, type ExecOptions } from 'child_process';
-import { logger } from '../../logger';
 import { ProcessManager, ProcessInfo } from '../types';
+
+import Debug from 'debug-level';
+const logger = new Debug('process:windows');
 
 export class WindowsProcessManager implements ProcessManager {
   async findProcess(name: string): Promise<ProcessInfo | null> {
