@@ -1,11 +1,8 @@
 import { type LLMConfig } from './types';
 import { logger } from './logger';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { DynamicToolRegistry } from './tool-registry';
 import { toolSchemas } from './types/tool-schemas';
-
-const execAsync = promisify(exec);
+import { createServiceManager, type ServiceConfig } from './service';
 
 interface OllamaResponse {
   model: string;
@@ -33,6 +30,7 @@ export class LLMClient {
   private config: LLMConfig;
   private toolRegistry: DynamicToolRegistry | null = null;
   private currentTool: string | null = null;
+  private serviceManager;
   public tools: any[] = [];
   private messages: any[] = [];
   public systemPrompt: string | null = null;
@@ -44,6 +42,17 @@ export class LLMClient {
     this.systemPrompt = config.systemPrompt || null;
     this.config.baseUrl = this.config.baseUrl.replace('localhost', '127.0.0.1');
     logger.debug(`Initializing Ollama client with baseURL: ${this.config.baseUrl}`);
+
+    // Initialize service manager
+    const serviceConfig: ServiceConfig = {
+      port: 11434,
+      healthCheck: {
+        timeout: 30000,
+        interval: 1000
+      },
+      command: 'ollama serve'
+    };
+    this.serviceManager = createServiceManager(serviceConfig);
   }
 
   setToolRegistry(registry: DynamicToolRegistry) {
@@ -72,70 +81,7 @@ export class LLMClient {
   }
 
   private async testConnection(): Promise<boolean> {
-    try {
-      logger.debug('Testing connection to Ollama...');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(`${this.config.baseUrl}/api/tags`, {
-        method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        logger.debug('Ollama connection test successful:', data);
-        return true;
-      } else {
-        logger.error('Ollama connection test failed with status:', response.status);
-        return false;
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          logger.error('Ollama connection test timed out after 5 seconds');
-        } else {
-          logger.error('Ollama connection test failed with error:', error.message);
-        }
-      }
-      return false;
-    }
-  }
-
-  private async forceKillOllama(): Promise<void> {
-    try {
-      logger.debug('Starting Ollama cleanup process...');
-      
-      try {
-        logger.debug('Attempting to kill Ollama by process name...');
-        const { stdout: killOutput } = await execAsync('taskkill /F /IM ollama.exe');
-        logger.debug('Taskkill output:', killOutput);
-      } catch (e) {
-        logger.debug('No Ollama process found to kill');
-      }
-      
-      try {
-        logger.debug('Checking for processes on port 11434...');
-        const { stdout } = await execAsync('netstat -ano | findstr ":11434"');
-        const pids = stdout.split('\n')
-          .map(line => line.trim().split(/\s+/).pop())
-          .filter(pid => pid && /^\d+$/.test(pid));
-        
-        for (const pid of pids) {
-          logger.debug(`Killing process with PID ${pid}...`);
-          await execAsync(`taskkill /F /PID ${pid}`);
-        }
-      } catch (e) {
-        logger.debug('No processes found on port 11434');
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      logger.debug('Ollama cleanup process completed');
-    } catch (error) {
-      logger.error('Error during Ollama force kill:', error);
-    }
+    return this.serviceManager.checkHealth();
   }
 
   private prepareMessages(): any[] {
@@ -152,55 +98,28 @@ export class LLMClient {
   }
 
   async invokeWithPrompt(prompt: string) {
-    logger.debug('Force killing any existing Ollama processes...');
-    await this.forceKillOllama();
+    try {
+      // Ensure service is running
+      await this.serviceManager.startService();
 
-    logger.debug('Starting new Ollama instance...');
-    const ollamaProcess = exec('ollama serve', { windowsHide: true });
-    
-    ollamaProcess.stdout?.on('data', (data) => {
-      logger.debug('Ollama stdout:', data.toString());
-    });
-    
-    ollamaProcess.stderr?.on('data', (data) => {
-      logger.debug('Ollama stderr:', data.toString());
-    });
-    
-    ollamaProcess.on('error', (error) => {
-      logger.error('Error starting Ollama:', error);
-    });
-    
-    ollamaProcess.unref();
-
-    let connected = false;
-    for (let i = 0; i < 10; i++) {
-      logger.debug(`Waiting for Ollama to start (attempt ${i + 1}/10)...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (await this.testConnection()) {
-        logger.debug('Ollama is ready and responding');
-        connected = true;
-        break;
+      // Detect tool using registry if available
+      if (this.toolRegistry) {
+        this.currentTool = this.toolRegistry.detectToolFromPrompt(prompt);
+        logger.debug(`Detected tool from registry: ${this.currentTool}`);
       }
-    }
-    
-    if (!connected) {
-      throw new Error('Failed to start Ollama after 10 attempts');
-    }
 
-    // Detect tool using registry if available
-    if (this.toolRegistry) {
-      this.currentTool = this.toolRegistry.detectToolFromPrompt(prompt);
-      logger.debug(`Detected tool from registry: ${this.currentTool}`);
+      logger.debug(`Preparing to send prompt: ${prompt}`);
+      this.messages = [];
+      this.messages.push({
+        role: 'user',
+        content: prompt
+      });
+
+      return this.invoke([]);
+    } catch (error) {
+      logger.error('Error during prompt invocation:', error);
+      throw error;
     }
-
-    logger.debug(`Preparing to send prompt: ${prompt}`);
-    this.messages = [];
-    this.messages.push({
-      role: 'user',
-      content: prompt
-    });
-
-    return this.invoke([]);
   }
 
   async invoke(toolResults: any[] = []) {
@@ -276,7 +195,7 @@ export class LLMClient {
       }
 
       logger.debug('Preparing Ollama request with payload:', JSON.stringify(payload, null, 2));
-      
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
@@ -317,7 +236,7 @@ export class LLMClient {
       try {
         // Handle both string and object responses
         const contentObj = typeof content === 'string' ? JSON.parse(content) : content;
-        
+
         // Check if response matches our structured format
         if (contentObj.name && contentObj.arguments) {
           isToolCall = true;
@@ -369,9 +288,14 @@ export class LLMClient {
       }
       logger.error('LLM invocation failed:', error);
       throw error;
-    } finally {
-      logger.debug('Cleaning up Ollama process...');
-      await this.forceKillOllama();
+    }
+  }
+
+  async close(): Promise<void> {
+    try {
+      await this.serviceManager.stopService();
+    } catch (error) {
+      logger.error('Error stopping service:', error);
     }
   }
 }
