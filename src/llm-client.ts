@@ -128,34 +128,31 @@ export class LLMClient {
         for (const result of toolResults) {
           // Convert MCP response to proper Ollama tool call format
           const toolOutput = result.output;
+          // Format tool response according to Ollama's expected structure
+          const formattedResponse = {
+            role: 'tool',
+            name: result.tool_name || '',
+            content: '',
+            tool_call_id: result.tool_call_id
+          };
+
           try {
             const parsedOutput = JSON.parse(toolOutput);
             if (parsedOutput.content && Array.isArray(parsedOutput.content)) {
               // Extract text content from MCP response
-              const content = parsedOutput.content
+              formattedResponse.content = parsedOutput.content
                 .filter((item: any) => item.type === 'text')
                 .map((item: any) => item.text)
                 .join('\n');
-              this.messages.push({
-                role: 'tool',
-                content,
-                tool_call_id: result.tool_call_id
-              });
             } else {
-              this.messages.push({
-                role: 'tool',
-                content: String(toolOutput),
-                tool_call_id: result.tool_call_id
-              });
+              formattedResponse.content = String(toolOutput);
             }
           } catch (e) {
             // If not JSON, use as-is
-            this.messages.push({
-              role: 'tool',
-              content: String(toolOutput),
-              tool_call_id: result.tool_call_id
-            });
+            formattedResponse.content = String(toolOutput);
           }
+
+          this.messages.push(formattedResponse);
         }
       }
 
