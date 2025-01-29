@@ -1,11 +1,13 @@
 import { type LLMConfig } from './types';
-import { logger } from './logger';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { DynamicToolRegistry } from './tool-registry';
 import { toolSchemas } from './types/tool-schemas';
+import { createServiceManager, type ServiceConfig } from './service';
+import chalk from 'chalk';
 
-const execAsync = promisify(exec);
+const bold = chalk.bold.blue;
+
+import Debug from 'debug-level';
+const logger = new Debug('llm_client');
 
 interface OllamaResponse {
   model: string;
@@ -33,6 +35,7 @@ export class LLMClient {
   private config: LLMConfig;
   private toolRegistry: DynamicToolRegistry | null = null;
   private currentTool: string | null = null;
+  private serviceManager;
   public tools: any[] = [];
   private messages: any[] = [];
   public systemPrompt: string | null = null;
@@ -44,102 +47,52 @@ export class LLMClient {
     this.systemPrompt = config.systemPrompt || null;
     this.config.baseUrl = this.config.baseUrl.replace('localhost', '127.0.0.1');
     logger.debug(`Initializing Ollama client with baseURL: ${this.config.baseUrl}`);
+
+    // Initialize service manager
+    const serviceConfig: ServiceConfig = {
+      port: 11434,
+      healthCheck: {
+        timeout: 30000,
+        interval: 1000
+      },
+      command: 'ollama serve'
+    };
+    this.serviceManager = createServiceManager(serviceConfig);
   }
 
   setToolRegistry(registry: DynamicToolRegistry) {
     this.toolRegistry = registry;
-    logger.debug('Tool registry set with tools:', registry.getAllTools());
+    logger.debug(`Tool registry set with tools: ${JSON.stringify(registry.getAllTools(), null, 2)}`);
   }
 
   public async listTools(): Promise<void> {
-    logger.info('===== Available Tools =====');
+    console.info('===== Available Tools =====');
     if (this.tools.length === 0) {
-      logger.info('No tools available');
+      console.info('No tools available');
       return;
     }
 
     for (const tool of this.tools) {
-      logger.info('\nTool Details:');
-      logger.info(`Name: ${tool.function.name}`);
-      logger.info(`Description: ${tool.function.description}`);
+      console.info(bold('\nTool Details:'));
+      console.info(`Name: ${bold(tool.function.name)}`);
+      console.info(`Description: ${tool.function.description}`);
       if (tool.function.parameters) {
-        logger.info('Parameters:');
-        logger.info(JSON.stringify(tool.function.parameters, null, 2));
+        console.info('Parameters:');
+        console.info(JSON.stringify(tool.function.parameters, null, 2));
       }
-      logger.info('------------------------');
+      console.info('------------------------');
     }
-    logger.info(`Total tools available: ${this.tools.length}`);
+    console.info(`Total tools available: ${this.tools.length}`);
   }
 
   private async testConnection(): Promise<boolean> {
-    try {
-      logger.debug('Testing connection to Ollama...');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(`${this.config.baseUrl}/api/tags`, {
-        method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const data = await response.json();
-        logger.debug('Ollama connection test successful:', data);
-        return true;
-      } else {
-        logger.error('Ollama connection test failed with status:', response.status);
-        return false;
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          logger.error('Ollama connection test timed out after 5 seconds');
-        } else {
-          logger.error('Ollama connection test failed with error:', error.message);
-        }
-      }
-      return false;
-    }
-  }
-
-  private async forceKillOllama(): Promise<void> {
-    try {
-      logger.debug('Starting Ollama cleanup process...');
-      
-      try {
-        logger.debug('Attempting to kill Ollama by process name...');
-        const { stdout: killOutput } = await execAsync('taskkill /F /IM ollama.exe');
-        logger.debug('Taskkill output:', killOutput);
-      } catch (e) {
-        logger.debug('No Ollama process found to kill');
-      }
-      
-      try {
-        logger.debug('Checking for processes on port 11434...');
-        const { stdout } = await execAsync('netstat -ano | findstr ":11434"');
-        const pids = stdout.split('\n')
-          .map(line => line.trim().split(/\s+/).pop())
-          .filter(pid => pid && /^\d+$/.test(pid));
-        
-        for (const pid of pids) {
-          logger.debug(`Killing process with PID ${pid}...`);
-          await execAsync(`taskkill /F /PID ${pid}`);
-        }
-      } catch (e) {
-        logger.debug('No processes found on port 11434');
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      logger.debug('Ollama cleanup process completed');
-    } catch (error) {
-      logger.error('Error during Ollama force kill:', error);
-    }
+    return this.serviceManager.checkHealth();
   }
 
   private prepareMessages(): any[] {
     const formattedMessages = [];
+
+    // Add system prompt if present
     if (this.systemPrompt) {
       formattedMessages.push({
         role: 'system',
@@ -147,100 +100,93 @@ export class LLMClient {
       });
     }
 
-    formattedMessages.push(...this.messages);
+    // Add all messages with simple role/content structure
+    for (const message of this.messages) {
+      formattedMessages.push({
+        role: message.role,
+        content: message.content
+      });
+    }
+
     return formattedMessages;
   }
 
   async invokeWithPrompt(prompt: string) {
-    logger.debug('Force killing any existing Ollama processes...');
-    await this.forceKillOllama();
+    try {
+      // Ensure service is running
+      await this.serviceManager.startService();
 
-    logger.debug('Starting new Ollama instance...');
-    const ollamaProcess = exec('ollama serve', { windowsHide: true });
-    
-    ollamaProcess.stdout?.on('data', (data) => {
-      logger.debug('Ollama stdout:', data.toString());
-    });
-    
-    ollamaProcess.stderr?.on('data', (data) => {
-      logger.debug('Ollama stderr:', data.toString());
-    });
-    
-    ollamaProcess.on('error', (error) => {
-      logger.error('Error starting Ollama:', error);
-    });
-    
-    ollamaProcess.unref();
-
-    let connected = false;
-    for (let i = 0; i < 10; i++) {
-      logger.debug(`Waiting for Ollama to start (attempt ${i + 1}/10)...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (await this.testConnection()) {
-        logger.debug('Ollama is ready and responding');
-        connected = true;
-        break;
+      // Detect tool using registry if available
+      if (this.toolRegistry) {
+        this.currentTool = this.toolRegistry.detectToolFromPrompt(prompt);
+        logger.debug(`Detected tool from registry: ${this.currentTool}`);
       }
-    }
-    
-    if (!connected) {
-      throw new Error('Failed to start Ollama after 10 attempts');
-    }
 
-    // Detect tool using registry if available
-    if (this.toolRegistry) {
-      this.currentTool = this.toolRegistry.detectToolFromPrompt(prompt);
-      logger.debug(`Detected tool from registry: ${this.currentTool}`);
+      logger.debug(`Preparing to send prompt: ${prompt}`);
+      this.messages = [];
+      this.messages.push({
+        role: 'user',
+        content: prompt
+      });
+
+      return this.invoke([]);
+    } catch (error) {
+      logger.error('Error during prompt invocation:', error);
+      throw error;
     }
-
-    logger.debug(`Preparing to send prompt: ${prompt}`);
-    this.messages = [];
-    this.messages.push({
-      role: 'user',
-      content: prompt
-    });
-
-    return this.invoke([]);
   }
 
   async invoke(toolResults: any[] = []) {
     try {
       if (toolResults.length > 0) {
         for (const result of toolResults) {
-          // Convert MCP response to proper Ollama tool call format
-          const toolOutput = result.output;
+          let outputContent = '';
           try {
-            const parsedOutput = JSON.parse(toolOutput);
+            const parsedOutput = JSON.parse(result.output);
             if (parsedOutput.content && Array.isArray(parsedOutput.content)) {
-              // Extract text content from MCP response
-              const content = parsedOutput.content
+              outputContent = parsedOutput.content
                 .filter((item: any) => item.type === 'text')
                 .map((item: any) => item.text)
                 .join('\n');
-              this.messages.push({
-                role: 'tool',
-                content,
-                tool_call_id: result.tool_call_id
-              });
             } else {
-              this.messages.push({
-                role: 'tool',
-                content: String(toolOutput),
-                tool_call_id: result.tool_call_id
-              });
+              outputContent = String(result.output);
             }
           } catch (e) {
-            // If not JSON, use as-is
-            this.messages.push({
-              role: 'tool',
-              content: String(toolOutput),
-              tool_call_id: result.tool_call_id
-            });
+            outputContent = String(result.output);
           }
+
+          // Use Ollama's native tool message role
+          this.messages.push({
+            role: 'tool',
+            content: outputContent,
+            name: result.tool_name,
+            tool_call_id: result.tool_call_id
+          });
         }
+
+        // Add a system message to guide the response format
+        this.messages.unshift({
+          role: 'system',
+          content: 'Provide a natural language response based on the tool output.'
+        });
       }
 
-      const messages = this.prepareMessages();
+      // Prepare base messages
+      let messages = this.prepareMessages();
+
+      // For tool responses, replace system prompt with instruction for natural language
+      if (toolResults.length > 0) {
+        messages = messages.map(msg => {
+          if (msg.role === 'system') {
+            return {
+              role: 'system',
+              content: 'Provide a natural language response based on the tool output. Do not use JSON formatting.'
+            };
+          }
+          return msg;
+        });
+      }
+
       const payload: any = {
         model: this.config.model,
         messages,
@@ -251,32 +197,43 @@ export class LLMClient {
         }
       };
 
-      // Add structured output format if a tool is detected
-      if (this.currentTool) {
-        const toolSchema = this.currentTool ? this.toolSchemas[this.currentTool as keyof typeof toolSchemas] : null;
-        if (toolSchema) {
-          payload.format = {
-            type: "object",
-            properties: {
-              name: {
-                type: "string",
-                const: this.currentTool
-              },
-              arguments: toolSchema,
-              thoughts: {
-                type: "string",
-                description: "Your thoughts about using this tool"
-              }
+      // Only use structured output format for initial requests
+      if (toolResults.length === 0) {
+        payload.format = {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              enum: this.tools.map(t => t.function.name)
             },
-            required: ["name", "arguments", "thoughts"]
-          };
-          logger.debug('Added format schema for tool:', this.currentTool);
-          logger.debug('Schema:', JSON.stringify(payload.format, null, 2));
+            arguments: {
+              type: "object",
+              additionalProperties: true
+            },
+            thoughts: {
+              type: "string",
+              description: "Your thoughts about the response or tool usage"
+            }
+          },
+          required: ["name", "arguments", "thoughts"]
+        };
+
+        // If a specific tool is detected, add its schema
+        if (this.currentTool) {
+          const toolSchema = this.currentTool ? this.toolSchemas[this.currentTool as keyof typeof toolSchemas] : null;
+          if (toolSchema) {
+            payload.format.properties.arguments = toolSchema;
+            payload.format.properties.name.const = this.currentTool;
+            logger.debug('Added specific tool schema', { tool: this.currentTool });
+          }
         }
+
+        logger.debug(`Using format schema: ${JSON.stringify(payload.format, null, 2)}`);
       }
 
-      logger.debug('Preparing Ollama request with payload:', JSON.stringify(payload, null, 2));
-      
+      logger.debug(`Prepared messages for Ollama: ${JSON.stringify(messages, null, 2)}`);
+      logger.debug(`Preparing Ollama request: ${JSON.stringify(payload, null, 2)}`);
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
@@ -297,69 +254,69 @@ export class LLMClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error('Ollama request failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
+        logger.error(`Ollama request failed: status=${response.status}, statusText=${response.statusText}, details=${errorText}`);
         throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
 
       logger.debug('Response received from Ollama, parsing...');
       const completion = await response.json() as OllamaResponse;
-      logger.debug('Parsed response:', completion);
+      logger.debug(`Parsed response: ${JSON.stringify(completion, null, 2)}`);
 
       let isToolCall = false;
       let toolCalls: ToolCall[] = [];
       let content: any = completion.message.content;
 
-      // Parse the structured response
-      try {
-        // Handle both string and object responses
-        const contentObj = typeof content === 'string' ? JSON.parse(content) : content;
-        
-        // Check if response matches our structured format
-        if (contentObj.name && contentObj.arguments) {
-          isToolCall = true;
-          toolCalls = [{
-            id: `call-${Date.now()}`,
-            function: {
-              name: contentObj.name,
-              arguments: JSON.stringify(contentObj.arguments)
-            }
-          }];
-          content = contentObj.thoughts || "Using tool...";
-          logger.debug('Parsed structured tool call:', { toolCalls });
+      // Only parse as tool call if this wasn't a tool response
+      if (toolResults.length === 0) {
+        try {
+          // Handle both string and object responses
+          const contentObj = typeof content === 'string' ? JSON.parse(content) : content;
+
+          // Check if response matches our structured format
+          if (contentObj.name && contentObj.arguments) {
+            isToolCall = true;
+            toolCalls = [{
+              id: `call-${Date.now()}`,
+              function: {
+                name: contentObj.name,
+                arguments: JSON.stringify(contentObj.arguments)
+              }
+            }];
+            // Log the structured tool call details at debug level
+            logger.debug(`Tool call details: ${JSON.stringify(contentObj, null, 2)}`);
+            content = ''; // Don't include thoughts in regular output
+            logger.debug(`Parsed structured tool call: ${JSON.stringify(toolCalls, null, 2)}`);
+          }
+        } catch (e) {
+          logger.debug('Response is not a structured tool call:', e);
         }
-      } catch (e) {
-        logger.debug('Response is not a structured tool call:', e);
-      }
-
-      const result = {
-        content: typeof content === 'string' ? content : JSON.stringify(content),
-        isToolCall,
-        toolCalls
-      };
-
-      if (result.isToolCall) {
-        this.messages.push({
-          role: 'assistant',
-          content: result.content,
-          tool_calls: result.toolCalls?.map(call => ({
-            id: call.id,
-            type: 'function',
-            function: {
-              name: call.function.name,
-              arguments: call.function.arguments
-            }
-          }))
-        });
       } else {
-        this.messages.push({
-          role: 'assistant',
-          content: result.content
-        });
+        // For tool responses, just use the content directly
+        logger.debug('Using tool response content directly');
       }
+
+      let result;
+      if (toolResults.length > 0) {
+        // For tool responses, format the content for human consumption
+        result = {
+          content: content,
+          isToolCall: false,
+          toolCalls: []
+        };
+      } else {
+        // For initial requests, maintain the structured format
+        result = {
+          content: typeof content === 'string' ? content : JSON.stringify(content),
+          isToolCall,
+          toolCalls
+        };
+      }
+
+      // Add the response to messages
+      this.messages.push({
+        role: 'assistant',
+        content: result.content
+      });
 
       return result;
     } catch (error: any) {
@@ -369,9 +326,14 @@ export class LLMClient {
       }
       logger.error('LLM invocation failed:', error);
       throw error;
-    } finally {
-      logger.debug('Cleaning up Ollama process...');
-      await this.forceKillOllama();
+    }
+  }
+
+  async close(): Promise<void> {
+    try {
+      await this.serviceManager.stopService();
+    } catch (error) {
+      logger.error('Error stopping service:', error);
     }
   }
 }

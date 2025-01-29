@@ -1,6 +1,12 @@
-import fetch from 'node-fetch';
 import { exec, ChildProcess } from 'child_process';
 import { promisify } from 'util';
+import {
+  debugProcess,
+  debugRequest_payload,
+  debugRequest_timing,
+  debugRequest_response,
+  debugError
+} from '../test-debug';
 
 const execAsync = promisify(exec);
 
@@ -19,7 +25,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          query: { 
+          query: {
             type: "string",
             description: "Search query for emails"
           },
@@ -41,7 +47,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          query: { 
+          query: {
             type: "string",
             description: "Search query for Google Drive files"
           }
@@ -58,7 +64,7 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          name: { 
+          name: {
             type: "string",
             description: "Name of the folder to create"
           }
@@ -75,15 +81,15 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          to: { 
+          to: {
             type: "string",
             description: "Email address of the recipient"
           },
-          subject: { 
+          subject: {
             type: "string",
             description: "Subject of the email"
           },
-          body: { 
+          body: {
             type: "string",
             description: "Content of the email"
           }
@@ -100,15 +106,15 @@ export const TOOL_FORMATS = {
       arguments: {
         type: "object",
         properties: {
-          name: { 
+          name: {
             type: "string",
             description: "Name of the file to create"
           },
-          content: { 
+          content: {
             type: "string",
             description: "Content of the file"
           },
-          mimeType: { 
+          mimeType: {
             type: "string",
             description: "MIME type of the file"
           }
@@ -120,51 +126,11 @@ export const TOOL_FORMATS = {
   }
 };
 
-export async function killOllama() {
-  try {
-    console.log('Killing Ollama processes...');
-    await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-    const { stdout } = await execAsync('netstat -ano | findstr ":11434"').catch(() => ({ stdout: '' }));
-    const pids = stdout.split('\n')
-      .map(line => line.trim().split(/\s+/).pop())
-      .filter(pid => pid && /^\d+$/.test(pid));
-    
-    for (const pid of pids) {
-      await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    console.log('Ollama processes killed');
-  } catch (e) {
-    console.log('No Ollama processes found to kill');
-  }
-}
-
-export async function startOllama(): Promise<ChildProcess> {
-  console.log('Starting Ollama server...');
-  const ollamaProcess = exec('ollama serve', { windowsHide: true });
-  
-  ollamaProcess.on('error', (error) => {
-    console.error('Error starting Ollama:', error);
-  });
-
-  ollamaProcess.stdout?.on('data', (data) => {
-    console.log('Ollama stdout:', data.toString());
-  });
-
-  ollamaProcess.stderr?.on('data', (data) => {
-    console.error('Ollama stderr:', data.toString());
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 10000));
-  console.log('Ollama server started');
-  return ollamaProcess;
-}
-
-export async function makeOllamaRequest(payload: any, toolFormat: any) {
+export async function makeOllamaRequest(payload: any, toolFormat?: any) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
+  let response;
   try {
     // Add the format parameter to enforce structured output
     const requestPayload = {
@@ -176,10 +142,10 @@ export async function makeOllamaRequest(payload: any, toolFormat: any) {
       }
     };
 
-    console.log('Making request to Ollama with payload:', JSON.stringify(requestPayload, null, 2));
+    debugRequest_payload(requestPayload);
     const startTime = Date.now();
-    
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+
+    response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -188,8 +154,7 @@ export async function makeOllamaRequest(payload: any, toolFormat: any) {
       signal: controller.signal
     });
 
-    const endTime = Date.now();
-    console.log(`Request took ${endTime - startTime}ms`);
+    debugRequest_timing(startTime);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -197,7 +162,7 @@ export async function makeOllamaRequest(payload: any, toolFormat: any) {
     }
 
     const result = await response.json();
-    console.log('Raw response:', JSON.stringify(result, null, 2));
+    debugRequest_response(result);
     return result;
   } catch (error) {
     if (error instanceof Error) {
@@ -215,12 +180,12 @@ export async function makeOllamaRequest(payload: any, toolFormat: any) {
 export function parseToolResponse(result: any) {
   try {
     if (!result?.message?.content) {
-      console.error('Invalid response structure:', result);
+      debugError(debugProcess, 'Invalid response structure');
       throw new Error('Invalid response structure');
     }
 
     const content = result.message.content;
-    
+
     // If content is already an object (from structured output), return it
     if (typeof content === 'object') {
       return content;
@@ -229,14 +194,14 @@ export function parseToolResponse(result: any) {
     // Otherwise parse it (fallback for older Ollama versions)
     return JSON.parse(content.trim());
   } catch (e) {
-    console.error('Failed to parse response:', result?.message?.content);
+    debugError(debugProcess, `Failed to parse response: ${result?.message?.content}`);
     throw e;
   }
 }
 
 export async function cleanupProcess(process: ChildProcess | null) {
   if (process) {
-    console.log('Cleaning up process...');
+    debugProcess('Cleaning up process...');
     try {
       process.kill();
       if (process.pid) {
@@ -246,12 +211,20 @@ export async function cleanupProcess(process: ChildProcess | null) {
       const pids = stdout.split('\n')
         .map(line => line.trim().split(/\s+/).pop())
         .filter(pid => pid && /^\d+$/.test(pid));
-      
+
       for (const pid of pids) {
         await execAsync(`taskkill /F /PID ${pid}`).catch(() => {});
       }
     } catch (e) {
-      console.error('Error during process cleanup:', e);
+      debugError(debugProcess, e);
     }
   }
+}
+
+// Add Jest global teardown
+if (typeof afterAll === 'function') {
+  afterAll(async () => {
+    // Add a small delay to allow any pending connections to close
+    await new Promise(resolve => setTimeout(resolve, 500));
+  });
 }

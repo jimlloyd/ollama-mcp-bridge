@@ -1,7 +1,13 @@
 import { describe, it, expect } from '@jest/globals';
-import fetch from 'node-fetch';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import {
+  debugMcpTest,
+  debugRequest_payload,
+  debugRequest_timing,
+  debugRequest_response,
+  debugError
+} from './test-debug';
 
 const execAsync = promisify(exec);
 const OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
@@ -10,25 +16,14 @@ const TEST_TIMEOUT = 300000; // 5 minutes
 const HOOK_TIMEOUT = 30000;  // 30 seconds for hooks
 const REQUEST_TIMEOUT = 180000; // 3 minutes per request
 
-async function killOllama() {
-  try {
-    console.log('Killing Ollama processes...');
-    await execAsync('taskkill /F /IM ollama.exe').catch(() => {});
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('Ollama processes killed');
-  } catch (e) {
-    console.log('No Ollama processes found to kill');
-  }
-}
-
 async function makeOllamaRequest(payload: any) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    console.log('Making request to Ollama with payload:', JSON.stringify(payload, null, 2));
+    debugRequest_payload(payload);
     const startTime = Date.now();
-    
+
     const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
@@ -38,8 +33,7 @@ async function makeOllamaRequest(payload: any) {
       signal: controller.signal
     });
 
-    const endTime = Date.now();
-    console.log(`Request took ${endTime - startTime}ms`);
+    debugRequest_timing(startTime);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -47,7 +41,7 @@ async function makeOllamaRequest(payload: any) {
     }
 
     const result = await response.json();
-    console.log('Received response:', JSON.stringify(result, null, 2));
+    debugRequest_response(result);
     return result;
   } catch (error) {
     if (error instanceof Error) {
@@ -62,22 +56,9 @@ async function makeOllamaRequest(payload: any) {
   }
 }
 
-async function startOllama() {
-  console.log('Starting Ollama server...');
-  const ollamaProcess = exec('ollama serve');
-  await new Promise(resolve => setTimeout(resolve, 5000));
-  return ollamaProcess;
-}
-
 describe('MCP Tool Tests', () => {
-  beforeEach(async () => {
-    await killOllama();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }, HOOK_TIMEOUT);
-
   describe('Filesystem MCP Tests', () => {
     it('should handle write_file request', async () => {
-      await startOllama();
       const payload = {
         model: MODEL_NAME,
         messages: [
@@ -96,12 +77,12 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Filesystem write_file test completed');
     }, TEST_TIMEOUT);
   });
 
   describe('Brave Search MCP Tests', () => {
     it('should handle search request', async () => {
-      await startOllama();
       const payload = {
         model: MODEL_NAME,
         messages: [
@@ -120,12 +101,12 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Brave search test completed');
     }, TEST_TIMEOUT);
   });
 
   describe('GitHub MCP Tests', () => {
     it('should handle repository search', async () => {
-      await startOllama();
       const payload = {
         model: MODEL_NAME,
         messages: [
@@ -144,12 +125,12 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('GitHub repository search test completed');
     }, TEST_TIMEOUT);
   });
 
   describe('Flux MCP Tests', () => {
     it('should handle image generation request', async () => {
-      await startOllama();
       const payload = {
         model: MODEL_NAME,
         messages: [
@@ -168,12 +149,12 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Flux image generation test completed');
     }, TEST_TIMEOUT);
   });
 
   describe('Memory MCP Tests', () => {
     it('should handle memory operations', async () => {
-      await startOllama();
       const payload = {
         model: MODEL_NAME,
         messages: [
@@ -192,10 +173,7 @@ describe('MCP Tool Tests', () => {
 
       const result = await makeOllamaRequest(payload);
       expect(result.message).toBeDefined();
+      debugMcpTest('Memory operation test completed');
     }, TEST_TIMEOUT);
   });
-
-  afterAll(async () => {
-    await killOllama();
-  }, HOOK_TIMEOUT);
 });

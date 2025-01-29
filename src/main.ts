@@ -1,9 +1,10 @@
 import readline from 'readline';
 import { MCPLLMBridge } from './bridge';
 import { loadBridgeConfig } from './config';
-import { logger } from './logger';
-import { exec } from 'child_process';
 import { BridgeConfig } from './types';
+
+import Debug from 'debug-level';
+const logger = new Debug('main');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -14,29 +15,6 @@ async function question(prompt: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(prompt, resolve);
   });
-}
-
-async function forceExit() {
-  logger.info('Force exiting...');
-  
-  try {
-    exec('taskkill /F /IM ollama.exe', () => {});
-    exec('netstat -ano | findstr ":11434"', (error: any, stdout: string) => {
-      if (!error && stdout) {
-        const pids = stdout.split('\n')
-          .map(line => line.trim().split(/\s+/).pop())
-          .filter(pid => pid && /^\d+$/.test(pid));
-        
-        pids.forEach(pid => {
-          exec(`taskkill /F /PID ${pid}`, () => {});
-        });
-      }
-    });
-  } catch (e) {
-    // Ignore errors during force kill
-  }
-
-  setTimeout(() => process.exit(0), 1000);
 }
 
 async function main() {
@@ -68,15 +46,30 @@ async function main() {
 
     let isClosing = false;
 
+    // Handle graceful shutdown
+    async function shutdown() {
+      if (isClosing) return;
+      isClosing = true;
+      logger.info('Shutting down...');
+      try {
+        await bridge.close();
+      } catch (error) {
+        logger.error('Error during shutdown:', error);
+      }
+      rl.close();
+      process.exit(0);
+    }
+
+    // Set up signal handlers
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+
     while (!isClosing) {
       try {
         const userInput = await question("\nEnter your prompt (or 'list-tools' or 'quit'): ");
-        
+
         if (userInput.toLowerCase() === 'quit') {
-          isClosing = true;
-          await bridge.close();
-          rl.close();
-          forceExit();
+          await shutdown();
           break;
         }
 
@@ -99,19 +92,10 @@ async function main() {
   }
 }
 
-process.on('SIGINT', () => {
-  logger.info('Received SIGINT...');
-  forceExit();
-});
-
-process.on('exit', () => {
-  logger.info('Exiting process...');
-});
-
 if (require.main === module) {
   main().catch(error => {
     logger.error(`Unhandled error: ${error?.message || String(error)}`);
-    forceExit();
+    process.exit(1);
   });
 }
 

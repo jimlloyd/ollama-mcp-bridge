@@ -1,9 +1,9 @@
 import { ChildProcess } from 'child_process';
-import { 
-  killOllama, 
-  startOllama, 
-  makeOllamaRequest, 
-  parseToolResponse, 
+import {
+  // killOllama,
+  // startOllama,
+  makeOllamaRequest,
+  parseToolResponse,
   cleanupProcess,
   MODEL_NAME,
   TEST_TIMEOUT,
@@ -14,19 +14,19 @@ import {
 describe('Gmail & Drive MCP Tests', () => {
   let ollamaProcess: ChildProcess | null = null;
 
-  beforeEach(async () => {
-    await killOllama();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }, HOOK_TIMEOUT);
+  // beforeEach(async () => {
+  //   await killOllama();
+  //   await new Promise(resolve => setTimeout(resolve, 3000));
+  // }, HOOK_TIMEOUT);
 
-  afterEach(async () => {
-    if (ollamaProcess) {
-      await cleanupProcess(ollamaProcess);
-    }
-  }, HOOK_TIMEOUT);
+  // afterEach(async () => {
+  //   if (ollamaProcess) {
+  //     await cleanupProcess(ollamaProcess);
+  //   }
+  // }, HOOK_TIMEOUT);
 
   it('should search Gmail messages', async () => {
-    ollamaProcess = await startOllama();
+    // ollamaProcess = await startOllama();
 
     const payload = {
       model: MODEL_NAME,
@@ -45,14 +45,14 @@ describe('Gmail & Drive MCP Tests', () => {
 
     const result = await makeOllamaRequest(payload, TOOL_FORMATS.search_email);
     const parsed = parseToolResponse(result);
-    
+
     expect(parsed.name).toBe('search_email');
     expect(parsed.arguments).toHaveProperty('query');
     expect(typeof parsed.arguments.query).toBe('string');
   }, TEST_TIMEOUT);
 
   it('should search Drive files', async () => {
-    ollamaProcess = await startOllama();
+    // ollamaProcess = await startOllama();
 
     const payload = {
       model: MODEL_NAME,
@@ -71,14 +71,14 @@ describe('Gmail & Drive MCP Tests', () => {
 
     const result = await makeOllamaRequest(payload, TOOL_FORMATS.search_drive);
     const parsed = parseToolResponse(result);
-    
+
     expect(parsed.name).toBe('search_drive');
     expect(parsed.arguments).toHaveProperty('query');
     expect(typeof parsed.arguments.query).toBe('string');
   }, TEST_TIMEOUT);
 
   it('should create new Drive folders', async () => {
-    ollamaProcess = await startOllama();
+    // ollamaProcess = await startOllama();
 
     const payload = {
       model: MODEL_NAME,
@@ -97,14 +97,14 @@ describe('Gmail & Drive MCP Tests', () => {
 
     const result = await makeOllamaRequest(payload, TOOL_FORMATS.create_folder);
     const parsed = parseToolResponse(result);
-    
+
     expect(parsed.name).toBe('create_folder');
     expect(parsed.arguments).toHaveProperty('name');
     expect(typeof parsed.arguments.name).toBe('string');
   }, TEST_TIMEOUT);
 
   it('should send emails', async () => {
-    ollamaProcess = await startOllama();
+    // ollamaProcess = await startOllama();
 
     const payload = {
       model: MODEL_NAME,
@@ -123,7 +123,7 @@ describe('Gmail & Drive MCP Tests', () => {
 
     const result = await makeOllamaRequest(payload, TOOL_FORMATS.send_email);
     const parsed = parseToolResponse(result);
-    
+
     expect(parsed.name).toBe('send_email');
     expect(parsed.arguments).toHaveProperty('to');
     expect(parsed.arguments).toHaveProperty('subject');
@@ -134,7 +134,7 @@ describe('Gmail & Drive MCP Tests', () => {
   }, TEST_TIMEOUT);
 
   it('should upload files to Drive', async () => {
-    ollamaProcess = await startOllama();
+    // ollamaProcess = await startOllama();
 
     const payload = {
       model: MODEL_NAME,
@@ -153,7 +153,7 @@ describe('Gmail & Drive MCP Tests', () => {
 
     const result = await makeOllamaRequest(payload, TOOL_FORMATS.upload_file);
     const parsed = parseToolResponse(result);
-    
+
     expect(parsed.name).toBe('upload_file');
     expect(parsed.arguments).toHaveProperty('name');
     expect(parsed.arguments).toHaveProperty('content');

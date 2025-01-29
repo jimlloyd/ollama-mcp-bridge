@@ -1,4 +1,5 @@
-import { logger } from './logger';
+import Debug from 'debug-level';
+const logger = new Debug('mcp-registry');
 
 export interface MCPDefinition {
   name: string;
@@ -90,7 +91,7 @@ export class MCPRegistry {
       },
       // Add more tool-specific defaults as needed
     };
-    
+
     return defaults[toolName] || {};
   }
 

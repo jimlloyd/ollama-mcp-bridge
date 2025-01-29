@@ -1,8 +1,10 @@
 import { MCPClient } from './mcp-client';
 import { LLMClient } from './llm-client';
-import { logger } from './logger';
-import { BridgeConfig, Tool, ServerParameters } from './types';
+import { BridgeConfig, Tool } from './types';
 import { DynamicToolRegistry } from './tool-registry';
+
+import Debug from 'debug-level';
+const logger = new Debug('bridge');
 
 interface MCPMap {
   [key: string]: MCPClient;
@@ -45,15 +47,15 @@ export class MCPLLMBridge implements MCPLLMBridge {
   async initialize(): Promise<boolean> {
     try {
       logger.info('Connecting to MCP servers...');
-      
+
       // Initialize all MCP clients
       for (const [name, client] of Object.entries(this.mcpClients)) {
         logger.info(`Connecting to MCP: ${name}`);
         await client.connect();
-        
+
         const mcpTools = await client.getAvailableTools();
         logger.info(`Received ${mcpTools.length} tools from ${name}`);
-        
+
         // Register tools and map them to this MCP
         mcpTools.forEach(tool => {
           this.toolRegistry.registerTool(tool);
@@ -69,10 +71,10 @@ export class MCPLLMBridge implements MCPLLMBridge {
       // Set tools in LLM client
       this.llmClient.tools = this.tools;
       this.llmClient.setToolRegistry(this.toolRegistry);
-      
+
       logger.info(`Initialized with ${this.tools.length} total tools`);
       logger.debug('Available tools:', this.tools.map(t => t.function.name).join(', '));
-      
+
       return true;
     } catch (error: any) {
       logger.error(`Bridge initialization failed: ${error?.message || String(error)}`);
@@ -104,6 +106,7 @@ export class MCPLLMBridge implements MCPLLMBridge {
       const detectedTool = this.toolRegistry.detectToolFromPrompt(message);
       logger.info(`Detected tool: ${detectedTool}`);
 
+      // Set appropriate instructions based on whether it's an initial tool call
       if (detectedTool) {
         const instructions = this.toolRegistry.getToolInstructions(detectedTool);
         if (instructions) {
@@ -124,7 +127,9 @@ export class MCPLLMBridge implements MCPLLMBridge {
         response = await this.llmClient.invoke(toolResponses);
       }
 
-      return response.content;
+      // Return the content directly - it will already be properly formatted
+      // by the LLM based on whether it's a tool response or not
+      return response.content || '';
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
       logger.error(`Error processing message: ${errorMsg}`);
@@ -136,10 +141,10 @@ export class MCPLLMBridge implements MCPLLMBridge {
     const toolResponses = [];
 
     for (const toolCall of toolCalls) {
-      try {
-        const requestedName = toolCall.function.name;
-        logger.debug(`[MCP] Looking up tool name: ${requestedName}`);
+      const requestedName = toolCall.function.name;
+      logger.debug(`[MCP] Looking up tool name: ${requestedName}`);
 
+      try {
         // Get appropriate MCP client for this tool
         const mcpClient = this.toolToMcp[requestedName];
         if (!mcpClient) {
@@ -149,7 +154,7 @@ export class MCPLLMBridge implements MCPLLMBridge {
         logger.info(`[MCP] About to call MCP tool: ${requestedName}`);
         let toolArgs = JSON.parse(toolCall.function.arguments);
         logger.info(`[MCP] Tool arguments prepared: ${JSON.stringify(toolArgs)}`);
-        
+
         const mcpCallPromise = mcpClient.callTool(requestedName, toolArgs);
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('MCP call timed out after 30 seconds')), 30000);
@@ -157,18 +162,20 @@ export class MCPLLMBridge implements MCPLLMBridge {
 
         logger.info(`[MCP] Sending call to MCP...`);
         const result = await Promise.race([mcpCallPromise, timeoutPromise]);
-        logger.info(`[MCP] Received response from MCP`);
-        logger.debug(`[MCP] Tool result:`, result);
-        
+
+        const output: string = typeof result === 'string' ? result : JSON.stringify(result);
+        logger.debug(`[MCP] Tool result: <<${output}>>`);
+
         toolResponses.push({
           tool_call_id: toolCall.id,
-          output: typeof result === 'string' ? result : JSON.stringify(result)
+          tool_name: requestedName,
+          output
         });
-        
       } catch (error: any) {
         logger.error(`[MCP] Tool execution failed with error:`, error);
         toolResponses.push({
           tool_call_id: toolCall.id,
+          tool_name: requestedName,
           output: `Error: ${error?.message || String(error)}`
         });
       }
@@ -181,7 +188,7 @@ export class MCPLLMBridge implements MCPLLMBridge {
     this.tools = tools;
     this.llmClient.tools = tools;
     this.toolRegistry = new DynamicToolRegistry();
-    
+
     tools.forEach(tool => {
       if (tool.function) {
         this.toolRegistry.registerTool({
@@ -194,8 +201,13 @@ export class MCPLLMBridge implements MCPLLMBridge {
   }
 
   async close(): Promise<void> {
-    for (const client of Object.values(this.mcpClients)) {
-      await client.close();
+    try {
+      await this.llmClient.close();
+      for (const client of Object.values(this.mcpClients)) {
+        await client.close();
+      }
+    } catch (error) {
+      logger.error('Error during bridge shutdown:', error);
     }
   }
 }
