@@ -1,6 +1,8 @@
 import { LLMClient } from '../llm-client';
 import { LLMConfig } from '../types';
-import { logger } from '../logger';
+
+import Debug from 'debug-level';
+const logger = new Debug('connection:test');
 
 export async function testOllamaConnection(config: LLMConfig): Promise<boolean> {
   logger.info('Starting Ollama connection test...');
