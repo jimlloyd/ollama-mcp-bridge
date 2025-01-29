@@ -136,10 +136,10 @@ export class MCPLLMBridge implements MCPLLMBridge {
     const toolResponses = [];
 
     for (const toolCall of toolCalls) {
-      try {
-        const requestedName = toolCall.function.name;
-        logger.debug(`[MCP] Looking up tool name: ${requestedName}`);
+      const requestedName = toolCall.function.name;
+      logger.debug(`[MCP] Looking up tool name: ${requestedName}`);
 
+      try {
         // Get appropriate MCP client for this tool
         const mcpClient = this.toolToMcp[requestedName];
         if (!mcpClient) {
@@ -162,12 +162,14 @@ export class MCPLLMBridge implements MCPLLMBridge {
 
         toolResponses.push({
           tool_call_id: toolCall.id,
+          tool_name: requestedName,
           output: typeof result === 'string' ? result : JSON.stringify(result)
         });
       } catch (error: any) {
         logger.error(`[MCP] Tool execution failed with error:`, error);
         toolResponses.push({
           tool_call_id: toolCall.id,
+          tool_name: requestedName,
           output: `Error: ${error?.message || String(error)}`
         });
       }
