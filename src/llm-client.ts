@@ -7,7 +7,7 @@ import chalk from 'chalk';
 const bold = chalk.bold.blue;
 
 import Debug from 'debug-level';
-const logger = new Debug('llm-client');
+const logger = new Debug('llm_client');
 
 interface OllamaResponse {
   model: string;
@@ -279,11 +279,22 @@ export class LLMClient {
         logger.debug('Using tool response content directly');
       }
 
-      const result = {
-        content: typeof content === 'string' ? content : JSON.stringify(content),
-        isToolCall,
-        toolCalls
-      };
+      let result;
+      if (toolResults.length > 0) {
+        // For tool responses, format the content for human consumption
+        result = {
+          content: content,
+          isToolCall: false,
+          toolCalls: []
+        };
+      } else {
+        // For initial requests, maintain the structured format
+        result = {
+          content: typeof content === 'string' ? content : JSON.stringify(content),
+          isToolCall,
+          toolCalls
+        };
+      }
 
       // Add the response to messages
       this.messages.push({
